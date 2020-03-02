@@ -1,8 +1,8 @@
 ﻿module col
 
-type  Node<'T> = | Leaf of 'T array
-                 | Branch of Node<'T> array
-                 | EmptyNode
+type internal Node<'T> = | Leaf of 'T array
+                         | Branch of Node<'T> array
+                         | EmptyNode
 
 
 module private Tools =   
@@ -105,55 +105,50 @@ module private Tools =
       (size >>>> BucketBits) > (1 <<< (shift levels))
     
 
-    
-    
-    
-    
-
-[<CustomEquality>]
-[<NoComparison>]
-type Vector<'T when 'T : equality> = 
-  { size : int
-    root : 'T Node
-    tail : 'T array 
-    mutable hash : int }
+type Vector<'T when 'T : equality>  private (size:int, root : 'T Node, tail : 'T array, hash :int) = 
+  let mutable hash = hash
+  static let EMPTY_VECTOR =  Vector<'T>(0, EmptyNode, Array.empty, 0)
+  //new (size:int, root : 'T Node, tail : 'T array ) = Vector (size, root, tail, -1)
+  member internal x.size = size
+  member internal x.root= root
+  member internal x.tail = tail
+  member internal x.withRoot root = Vector(size, root, tail, -1) 
+  member internal x.withTail tail = Vector(size, root, tail, -1)
+  member internal x.withTailSize tail size = Vector(size, root, tail, -1)
+  member internal x.withRootTailSize root tail size  = Vector(size, root, tail, -1)
   
+  static member EMPTY = EMPTY_VECTOR                       
+
   override x.Equals(o) = 
     match o with
       | :? Vector<'T> as y ->
            let rec calc i = 
-             if i = x.size then true 
-             else if (Tools.getInNode i x.size x.tail x.root) = (Tools.getInNode i y.size y.tail y.root)
+             if i = size then true 
+             else if (Tools.getInNode i size tail root) = (Tools.getInNode i y.size y.tail y.root)
                   then calc (i+1)
                   else false
-           if x.size = y.size 
+           if size = y.size 
            then calc 0
            else false
       | _ -> false 
   override x.GetHashCode () =
-    if x.hash = -1
+    if hash = -1
     then let rec calc i a = 
-              if i = x.size 
+              if i = size 
               then a.GetHashCode ()
-              else calc (i + 1) ((Tools.getInNode i x.size x.tail x.root)::a)
-         x.hash <- calc 0 []             
-         x.hash
-       else x.hash
-  static member EMPTY = staticVectorHolder<'T>.emptyVector
-
-and staticVectorHolder<'T when 'T : equality> () =
-    static let EMPTY_VECTOR =
-       { size = 0
-         root = EmptyNode
-         tail = Array.empty 
-         hash = 0} : 'T Vector
-    static member emptyVector = EMPTY_VECTOR
+              else calc (i + 1) ((Tools.getInNode i size tail root)::a)
+         hash <- calc 0 []             
+         hash
+       else hash    
+    
+    
+  
 
 
 
-module Get =
+module private Get =
     open Tools
-    let get index vector =
+    let get (index:int) (vector:'T Vector) : 'T option =
       if Tools.isOutOfBounds vector.size index
       then None
       else match inTailIndex vector.size index with
@@ -162,23 +157,26 @@ module Get =
                           valueIn path vector.root  |> Some
     
     
-    let getOrFail index vector =
+    let getOrFail (index:int) (vector:'T Vector) =
       getInNode index vector.size vector.tail vector.root  
     
  
       
 
-[<CustomEquality>]
-[<NoComparison>]
-type SubVector<'T when 'T : equality> = 
- 
-  { v : Vector<'T>
-    i : int
-    n : int
-    forward : bool
-    mutable hash : int }
-
-  static member EMPTY = staticSubVectorHolder<'T>.emptySubVector
+type SubVector<'T when 'T : equality> private (v:Vector<'T>, i :int , n:int ,forward :bool, hash:int) = 
+  let mutable hash = hash
+  static let EMPTY_SUBVECTOR =  SubVector<'T>(Vector<'T>.EMPTY, 0, 0, true, 0)
+  member internal x.v = v
+  member internal x.i = i
+  member internal x.n = n
+  member internal x.forward = forward
+  member internal x.withLength n = SubVector (v ,i ,n, forward, -1)
+  member internal x.withIndexLenght i n = SubVector (v, i, n, forward, -1)
+  member internal x.withIndex i = SubVector (v, i, n, forward, -1)
+  member internal x.withForward forward = SubVector (v, i ,n, forward, -1 )
+  internal new (v:'T Vector, i:int, n: int, forward:bool) = SubVector(v,i,n,forward, -1)
+  static member EMPTY = EMPTY_SUBVECTOR  
+  
   override x.Equals(o) =
       match o with
       | :? SubVector<'T> as y -> 
@@ -197,7 +195,7 @@ type SubVector<'T when 'T : equality> =
         else false
       | _ -> false
     override x.GetHashCode () = 
-       if x.hash = -1
+       if hash = -1
        then let rec calcf i a = 
               if i = x.n 
               then a.GetHashCode ()
@@ -206,29 +204,19 @@ type SubVector<'T when 'T : equality> =
               if i = x.n
               then a.GetHashCode ()
               else calcb (i + 1) ((Get.getOrFail (x.i+x.n - i-1) x.v)::a)
-            x.hash <- if x.forward 
+            hash <- if x.forward 
                       then (calcf 0 [])
                       else (calcb 0 [])
-            x.hash
+            hash
 
-       else x.hash
-    static member empty = staticSubVectorHolder<'T>.emptySubVector
+       else hash
 
-and  staticSubVectorHolder<'T when 'T : equality> () =
-  static let EMPTY_SUB_VECTOR = 
-     { v=staticVectorHolder.emptyVector
-       i=0
-       n=0
-       forward = true
-       hash = 0} : 'T SubVector
 
-  static member emptySubVector = EMPTY_SUB_VECTOR
 
- 
 module rec Vector =
  
   
-  let empty () = Vector.EMPTY
+  let empty () = Vector<_>.EMPTY
 
   let get(index:int) (vector:'T Vector) : 'T option = 
     Get.get index vector
@@ -236,7 +224,7 @@ module rec Vector =
    
   let first (vector:'T Vector) = get 0 vector
 
-  let size vector = vector.size
+  let size (vector:_ Vector) = vector.size
 
   let add element vector = Add.add element vector
   
@@ -245,15 +233,15 @@ module rec Vector =
     //plz optimize
     List.fold (fun a x -> add x a) vector elements
     
-  let ofList elements = 
-    Vector.EMPTY  |> addAll elements 
+  let ofList (elements:'T list) : 'T Vector = 
+    Vector<'T>.EMPTY  |> addAll elements 
 
 
   let last vector : 'T option = get ((size vector) - 1) vector 
 
   module SubVector =
    
-    let get index subvector : 'T option = 
+    let get index (subvector:'T SubVector) : 'T option = 
       if index < subvector.n && index >= 0
       then if subvector.forward 
            then Vector.get (subvector.i + index) subvector.v 
@@ -262,69 +250,63 @@ module rec Vector =
    
     let first v= get 0 v
 
-    let firstOrFail v = 
+    let firstOrFail (v:'T SubVector) = 
        if 0 < v.n 
        then if v.forward
             then Get.getOrFail v.i v.v
             else Get.getOrFail (v.i + v.n - 1) v.v 
        else failwith "vector is empty" 
     
-    let size subvector : int = subvector.n
+    let size (subvector:'T SubVector) : int = subvector.n
     
     let last (subvector: 'T SubVector) : 'T option = 
       get (size subvector - 1 ) subvector
     
-    let drop n subvector : 'T SubVector option = 
+    let drop n (subvector:'T SubVector) : 'T SubVector option = 
       if subvector.n > n
       then if subvector.forward 
-           then Some {subvector with n = subvector.n - n
-                                     hash = -1}
-           else Some {subvector with i = subvector.i + n
-                                     n = subvector.n - n
-                                     hash = -1}
+           then subvector.withLength (subvector.n-n) 
+                |> Some       
+           else subvector.withIndexLenght (subvector.i + n)
+                                          (subvector.n - n)
+                |> Some                            
       else None
     
     let pop vector = drop 1 vector 
     
-    let cut n subvector : 'T SubVector option =
+    let cut n (subvector:'T SubVector) : 'T SubVector option =
+     
       match struct (subvector.n, n, subvector.forward) with
       | _,0,_ -> Some subvector
       | 0,_,_ -> None
       | sn,n,_ when n > sn -> None
-      | sn,n,_ when n = sn -> Some SubVector.empty
-      | _, n, true -> Some {subvector with i = subvector.i + n
-                                           n = subvector.n - n
-                                           hash = -1}
-      | _, n, false -> Some {subvector with n = subvector.n - n
-                                            hash = -1}
+      | sn,n,_ when n = sn -> Some SubVector<'T>.EMPTY
+      | _, n, true -> subvector.withIndexLenght (subvector.i + n)
+                                                (subvector.n - n)
+                      |> Some
+      | _, n, false -> subvector.withLength (subvector.n - n)
+                       |> Some
 
     //let decons vector = get 0 vector, cut 1 vector  
     
-    let sub i n subvector: 'T SubVector option =
+    let sub i n (subvector:'T SubVector) : 'T SubVector option =
       if i<0 || n<0 then None
       elif i + n > subvector.n then None
-      elif n = 0 then Some SubVector.empty
+      elif n = 0 then Some SubVector.EMPTY
       elif subvector.n = 0 then None
-      elif subvector.forward then Some {subvector with i = subvector.i + i
-                                                       n = n
-                                                       hash = -1}
-      else Some {subvector with n = subvector.n - i
-                                i = subvector.n - i - n
-                                hash = -1} 
-
-    let nextOrFail v =
+      elif subvector.forward then Some (subvector.withIndexLenght (subvector.i + i) n)
+      else Some (subvector.withIndexLenght  (subvector.n - i - n) (subvector.n - i))
+                               
+    let nextOrFail (v:'T SubVector) =
       if v.n = 0
       then failwith "empty subvector"
       elif v.n = 1 
       then SubVector.EMPTY
       elif v.forward
-      then { v with i = v.i + 1
-                    n = v.n - 1
-                    hash = -1 }
-      else { v with n = v.n - 1
-                    hash = -1} 
-
-    let rec fold f a subvector =
+      then v.withIndexLenght (v.i + 1) (v.n - 1)
+      else v.withLength (v.n - 1)
+ 
+    let rec fold f a (subvector: 'T SubVector) =
       //Plz, optimize by running on each Leaf
       let mutable acc = a 
       let v = subvector.v
@@ -336,9 +318,9 @@ module rec Vector =
               acc <- f acc (Get.getOrFail i v)
       acc 
 
-    let rev subvector : 'T SubVector = 
-      { subvector with forward = not subvector.forward
-                       hash = -1 }
+    let rev (subvector:'T SubVector) : 'T SubVector = 
+       subvector.withForward (not subvector.forward)
+                   
 
     let foldback f subvector a=
       fold (fun a x -> f x a) a (rev subvector)
@@ -357,16 +339,7 @@ module rec Vector =
       match foldav' (OptimizedClosures.FSharpFunc<_,_,_>.Adapt f) seed vector with
       | struct (a,m) -> a,m
              
-(*
-  let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x list) : 'a =
-         let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x list) : 'a =
-             match xs with
-             | []      -> a
-             | x :: xs -> match f'.Invoke (a, x) with
-                          | struct (a', false) -> a'
-                          | struct (a', true) -> folda' f' a' xs
-         folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs 
-*)
+
     let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x SubVector) : 'a =
       let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x SubVector) : 'a =
          if size xs = 0
@@ -376,7 +349,7 @@ module rec Vector =
                       | struct (a', true) -> folda' f' a' (nextOrFail xs)
       folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs
 
-  module Add =
+  module internal Add =
     let leafOfArray array = Leaf array
     let branch array = Branch array
 
@@ -391,16 +364,13 @@ module rec Vector =
       let tailNode = leafOfArray lastTail 
       branch [|currentRoot; newPath levels tailNode|] 
 
-    let withPushedIntoDeeperTree vec v = 
+    let withPushedIntoDeeperTree (vec:'T Vector) v = 
       let currentRoot = vec.root
       let newRoot = newLevelRoot currentRoot
                                  <| Tools.levels vec.size
                                  <| vec.tail
-      { size = vec.size + 1
-        root = newRoot
-        tail = Array.singleton v 
-        hash = -1} : Vector<'T>
-    
+      vec.withRootTailSize newRoot (Array.singleton v) (vec.size + 1)
+      
     let atIndex  = Array.tryItem
 
     let cloneNodeWithValue node value index =
@@ -433,36 +403,32 @@ module rec Vector =
           | _ -> failwith "Can only modify branch nodes"
       | [] -> failwith "path is empty"
 
-    let withPushedIntoEquallySizedTree vector v= 
+    let withPushedIntoEquallySizedTree (vector:'T Vector) v= 
       let size = vector.size 
       let last = vector.size - 1
       let path = Tools.pathToNode size last 
       let newNode = leafOfArray vector.tail
       let newRoot = withNodeIn path vector.root newNode
-      { size=size+1
-        root=newRoot
-        tail = Array.singleton v
-        hash = -1 }
+      let newTail = Array.singleton v
+      vector.withRootTailSize newRoot newTail (vector.size + 1)
 
-    let withPushedIntoTree vector v =
+    let withPushedIntoTree (vector:'T Vector) v =
         let size = vector.size
         let levels = Tools.levels size
         if Tools.isFullRoot size levels
         then withPushedIntoDeeperTree vector v
         else withPushedIntoEquallySizedTree vector v
     
-    let withPushedIntoTail vector element = 
-      {vector with hash = -1
-                   size = vector.size + 1 
-                   tail = Array.append vector.tail [|element|]}
+    let withPushedIntoTail (vector:'T Vector) element = 
+      vector.withTailSize (Array.append vector.tail [|element|]) (vector.size + 1)
 
     let add element vector =
       if Tools.isFullTail vector.size
       then withPushedIntoTree vector element
       else withPushedIntoTail vector element
 
-  module Modify =
-    let isAtEnd i vec = vec.size = i
+  module private Modify =
+    let isAtEnd i (vec:'T Vector) = vec.size = i
     let rec nodeWith path node value = 
       match path with
       | [i'] -> match node with 
@@ -478,21 +444,19 @@ module rec Vector =
                       | _ -> failwith "not a branch node"
       | _ -> failwith "empty path"
     
-    let modify i value vector =  
+    let modify i value (vector:'T Vector) =  
       match Tools.inTailIndex vector.size i with
-      | true, i' -> {vector with tail = let a = Array.copy vector.tail
-                                        Array.set a i' value
-                                        a
-                                 hash = -1} 
+      | true, i' -> vector.withTail ( let a = Array.copy vector.tail
+                                      Array.set a i' value
+                                      a)
       | false,_ -> let path = Tools.pathToValue vector.size i
-                   { vector with hash = -1
-                                 root = nodeWith path vector.root value }
+                   vector.withRoot  (nodeWith path vector.root value)
     let set i v vec =
       if isAtEnd i vec then Add.add v vec |> Some
       elif Tools.isOutOfBounds vec.size i then None
       else modify i v vec |> Some
 
-  module Delete =
+  module private Delete =
     let rec rootWithoutLast path node =
       match path with
       | [i] -> if i = 0
@@ -514,41 +478,37 @@ module rec Vector =
                    | EmptyNode -> failwith "Should not be Empty node"
       | [] -> failwith "no path"
 
-    let indexOfLastAfterWithout vec = vec.size - 2
+    let indexOfLastAfterWithout (vec:'T Vector) = vec.size - 2
 
     let secondIsEmpty root  =    
       match root with 
            | Branch ar ->  Array.length ar > 1 && Array.get ar 1 = EmptyNode                        
            | _ -> false
 
-    let withoutInTree vec =
+    let withoutInTree (vec:'T Vector) =
       let path = Tools.pathToNode vec.size (indexOfLastAfterWithout vec)
       let newRoot = rootWithoutLast path vec.root
-      let newTail = Tools.arrayFor (vec.size - 2) vec.size vec.root  vec.tail
-      if Tools.levels vec.size > 1 && secondIsEmpty newRoot  //move to root without 
-      then { vec with hash = -1
-                      size = vec.size - 1
-                      root = match newRoot with
-                             | Branch ar -> Array.get ar 0
-                             | _ -> failwith "There is no branch"
-                      tail = newTail }
-      else { vec with hash = -1
-                      size = vec.size - 1
-                      root = newRoot
-                      tail = newTail }
+      let newTail = Tools.arrayFor (vec.size - 2) vec.size vec.root vec.tail
+      if Tools.levels vec.size > 1 && secondIsEmpty newRoot 
+      then let nextRoot = match newRoot with
+                          | Branch ar -> Array.get ar 0
+                          | _ -> failwith "There is no branch"
+           vec.withRootTailSize nextRoot
+                                newTail
+                                (vec.size - 1)
+      else vec.withRootTailSize newRoot newTail (vec.size - 1)
 
-    let without vector =
+    let without (vector:'T Vector) =
       let i = vector.size - 1
       match Tools.inTailIndex vector.size i with
       | true, 0 -> withoutInTree vector //
-      | true, i' -> {vector with size = vector.size - 1 
-                                 hash = -1
-                                 tail = let a = Array.zeroCreate i'
-                                        Array.blit vector.tail 0 a 0 i'
-                                        a}
+      | true, i' -> let newTail = let a = Array.zeroCreate i'
+                                  Array.blit vector.tail 0 a 0 i'
+                                  a
+                    vector.withTailSize newTail (vector.size - 1) 
       | false, _ -> failwith "there is no tail"
 
-    let pop vec = 
+    let pop (vec:'T Vector) = 
       if vec.size = 0 then None
       elif vec.size = 1 then Vector.EMPTY |> Some
       else without vec |> Some
@@ -556,48 +516,37 @@ module rec Vector =
   let set index element vector : 'T Vector option= 
    Modify.set index element vector
   
-  let drop n vector: 'T Vector option = 
+  let drop n (vector:'T Vector): 'T Vector option = 
     //plz optimize, at least by dropping tail-wise
     if n < 0 then None
     elif n > vector.size then None
     else 
       let tsize = Tools.tailSize vector.size
       if n < tsize
-      then {vector with hash = -1
-                        size = vector.size - n
-                        tail = let ar = Array.zeroCreate (tsize - n)
-                               Array.blit vector.tail 0 ar 0 n
-                               ar}
+      then let newTail = let ar = Array.zeroCreate (tsize - n)
+                         Array.blit vector.tail 0 ar 0 n
+                         ar
+           vector.withTailSize newTail (vector.size - 1)
            |> Some
       else 
         List.fold (fun a x -> Delete.pop (a.Value)) (Some vector) [1..n]
                                          
   let pop vector : 'T Vector option = Delete.pop vector   
   
-  let sub (i:int) (n:int) vector : 'T SubVector option = 
+  let sub i n (vector:'T Vector) : 'T SubVector option = 
     if (i > vector.size) then None
     elif i < 0 then None
-    elif n = 0 then Some <| SubVector.empty
+    elif n = 0 then Some <| SubVector.EMPTY
     elif n < 0 then None
     elif i + n > vector.size then None
-    else  Some { v = vector
-                 i = i
-                 n = n
-                 forward = true 
-                 hash = -1} 
-
-
-  
+    else Some ( SubVector (vector, i, n, true))
+    
   let cut n vector : 'T SubVector option = sub 0 n vector
 
-  let rev vector : 'T SubVector = 
+  let rev (vector: 'T Vector) : 'T SubVector = 
     if vector.size = 0
-    then SubVector.empty
-    else { v=vector
-           i = 0
-           n = vector.size 
-           forward = false 
-           hash = -1} 
+    then SubVector.EMPTY
+    else SubVector (vector, 0, vector.size, false)
 
   let list vector : 'T list = 
     SubVector.fold (fun a x -> x::a) [] (rev vector)
