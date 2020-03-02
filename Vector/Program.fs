@@ -43,11 +43,15 @@ let tryFirst () =
 let trysize () =
     let a= (smallData ()).a 
     if not (V.size a = 2) then failwith "not good size"
+    if not (V.size (V.empty ()) = 0) then failwith "not good size"
 
 let tryget () =
     let a= (smallData ()).a 
-    if not (Some 22 = (V.get 1 a)) then failwith "Not second"
-
+    if not (Some 22 = (V.get 1 a)) then failwith "Not second" 
+    if not  (Some 11 = (V.get 0 a)) then failwith "Not First"
+    if not (None = (V.get -1 a)) then failwith "No outofbounds"
+    if not (None = (V.get 2 a)) then failwith "No outof upper bounds"
+    
 let tryConcatAndAppend ()=
     let (a,b,c) = let data = smallData () 
                   (data.a, data.b, data.c)
@@ -61,37 +65,82 @@ let tryConcatAndAppend ()=
     then failwith "not concatted"
     if not (ac = V.append [11;33] a)
     then failwith "not appended"
+    if not ( (V.empty ()) = V.concat (V.empty ()) (V.empty ()) )
+    then failwith "no empty concat"
+    if not (a = V.append [] a)
+    then failwith "not appended empty"
+    
+
 let tryOfList () =
     let a= (smallData ()).a 
     if not (a = V.ofList [11;22])
     then failwith "not ofList"
+    if not ((V.empty ()) = V.ofList [])
+    then failwith "no empty list"
 
 let trySet () =
     let (a,b,c) = let data = smallData () 
                   (data.a, data.b, data.c)
     if not (Some c = V.set 1 33 a)
     then failwith "Could not set"
+    let x = V.add 1 (V.empty ())
+    let y = (V.set 0 1 (V.empty ())).Value 
+    if not (x = y)  
+    then failwith "set on empty"
+    if not (None = (V.set 1 1 (V.empty ())))
+    then failwith "Setting out of bounds"
+    if not (None = (V.set -1 1 (V.empty ())))
+    then failwith "Setting out of bounds"
+    
+
 let tryDrop () =
     let a= (smallData ()).a
     if not (Some (V.empty () |> V.add 11) = V.drop 1 a)
     then failwith "no drop"
+    if not (Some (V.empty () ) = V.drop 2 a)
+    then failwith "no drop all"
+    if not (None = V.drop 3 a)
+    then failwith "no drop too much"
+
 let tryLast ()=
     let a= (smallData ()).a
     if not (Some 22 = V.last a)
     then failwith "Not last"
+    if not (None = V.last (V.empty ()))
+    then failwith "Not last empty"
+
 let tryFold ()=
     let a= (smallData ()).a
     if not (33 = V.fold (+) 0 a)
     then failwith "not folding sum"
+    if not (0 = V.fold (+) 0 (V.empty ()))
+    then failwith "not folding empty"
+
 let tryFilter ()=
     let a= (smallData ()).a
     if not ( (V.ofList [11]) = (V.filter (fun x -> x % 2 = 1) a))
     then failwith "not filtered"
+    if not (V.empty() = V.filter  (fun x -> x % 2 = 1) (V.empty ()))
+    then failwith "not nothing filter"
+
 let tryCut ()=
   let a= (smallData ()).a
   if not ((V.cut 1 a |> function Some v -> SV.list v
-                                 | None -> failwith "was none") = [11])
-    then failwith "no cut"
+                               | None -> failwith "was none") = [11])
+  then failwith "no cut"
+  if not (None = (V.cut 1 (V.empty ()))) 
+  then failwith "emptyCut"
+
+  if not (None = (V.cut -1 (V.empty ()))) 
+  then failwith "emptyCut"
+
+  if not (None = (V.cut -1 a)) 
+  then failwith "emptyCut"
+  if not ((V.cut 0 (V.empty ()) |> function Some v -> SV.list v
+                                          | None -> failwith "was none") = [])
+  then failwith "no cut 0"
+
+
 let tryOfSub ()=
     let a= (smallData ()).a
     if not ((=) (V.empty ()
@@ -100,12 +149,27 @@ let tryOfSub ()=
                 (V.rev a
                  |> V.ofSub))
     then failwith "no of Sub"
-
+    let x = V.empty ()
+    let y = V.empty () 
+            |> (V.sub 0 0)
+            |> Option.get
+            |> V.ofSub
+    if not (x=y)
+    then failwith "no empty of Sub"
+    if not (None = V.sub -1 2 a)
+    then failwith "No lower bounds on sub"
+    if not (None = V.sub 10 1 a)
+    then failwith "No high bounds on sub"
+    if not (None = V.sub 0 3 a)
+    then failwith "no upper bounds on sub"
+    
 let subList () =
     let (a,sa) = let data = smallData () 
                  (data.a, data.sa)
     if not (SV.list sa = V.list a)
     then failwith "lists are not equal"
+    if not ([] = (V.empty () |> V.rev |> SV.list))
+    then failwith "no empty sublist"
     
 let trySubGet () = 
     let (a,sa,ra) = let data = smallData () 
@@ -116,8 +180,6 @@ let trySubGet () =
     then failwith "first is not equal"
     if not (None = SV.get 2 sa)
     then failwith "first outofbounds"
-    if not (SV.get -1 sa = V.get -1 a)
-    then failwith "first is not equal"
     if not (None = SV.get -1 sa)
     then failwith "first outofbounds"
     if not (Some 11 = SV.get 0 sa)
@@ -142,6 +204,7 @@ let tryFirstRev ()=
     then failwith "last ra"
     if not (SV.first sa = SV.last ra)
     then failwith "last first"
+
 let trySubDrops ()=
     let (sa,ra) = let data = smallData () 
                   (data.sa, data.ra)
@@ -188,11 +251,13 @@ let trySubFolds () =
     
     if not ([22;11] = SV.foldback (fun x a -> x::a) ra [])
     then failwith "not folding sum"
+
 let tryRevReving () =
     let (sa,ra) = let data = smallData () 
                   (data.sa, data.ra)
     if not (sa = SV.rev ra)
     then failwith "not reving the rev"
+
 let trySubListing ()=
     let (sa,ra) = let data = smallData () 
                   (data.sa, data.ra)
@@ -226,7 +291,6 @@ let loo () =
     tryLast ()
     tryFold ()
     tryFilter ()
-
     tryCut ()
     tryOfSub ()
     trySubGet ()
@@ -238,12 +302,7 @@ let loo () =
     tryRevReving ()
     trySubListing ()
     tryABitLarger ()
-    
-
-    
-    
-    
-
+ 
     printfn "The skinny goat says all is nice and shiny"
     
 

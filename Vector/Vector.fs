@@ -532,6 +532,7 @@ module rec Vector =
     elif i < 0 then None
     elif n = 0 then Some <| SubVector.empty
     elif n < 0 then None
+    elif i + n > vector.size then None
     else  Some { v = vector
                  i = i
                  n = n
