@@ -52,7 +52,7 @@ let tryget () =
     if not (None = (V.get -1 a)) then failwith "No outofbounds"
     if not (None = (V.get 2 a)) then failwith "No outof upper bounds"
     
-let tryConcatAndAppend ()=
+let tryAddAllAndAppend ()=
     let (a,b,c) = let data = smallData () 
                   (data.a, data.b, data.c)
     let ac = 
@@ -61,14 +61,14 @@ let tryConcatAndAppend ()=
          |> V.add 22
          |> V.add 11 
          |> V.add 33
-    if not (ac = V.concat c a) 
-    then failwith "not concatted"
-    if not (ac = V.append [11;33] a)
+    if not (ac = V.append c a) 
     then failwith "not appended"
-    if not ( (V.empty ()) = V.concat (V.empty ()) (V.empty ()) )
-    then failwith "no empty concat"
-    if not (a = V.append [] a)
-    then failwith "not appended empty"
+    if not (ac = V.addAll [11;33] a)
+    then failwith "not addAlled"
+    if not ( (V.empty ()) = V.append (V.empty ()) (V.empty ()) )
+    then failwith "no empty append"
+    if not (a = V.addAll [] a)
+    then failwith "not addAll empty"
     
 
 let tryOfList () =
@@ -278,13 +278,35 @@ let tryABitLarger ()=
     let r = List.fold (fun a v -> (V.pop a).Value) r [0..1056]
     if not (r=V.empty ()) then failwith "not emptied"
 
+let tryFoldUntil () =
+    let a= (smallData ()).a
+    if not ((33, None) = ( V.foldUntil (fun a v -> (a+v, None)) 0 a))
+    then failwith "not fold until all the way"
+    if not ((11, Some "Hi") = ( V.foldUntil (fun a v -> (a+v, Some "Hi")) 0 a))
+    then failwith "not fold until once"
+    if not ((22, Some "Hi") = ( SV.foldUntil (fun a v -> (a+v, Some "Hi")) 0 (V.rev a)))
+    then failwith "not fold until once backwards"
+    if not ((33, None) = ( SV.foldUntil (fun a v -> (a+v, None)) 0 (V.rev a)))
+    then failwith "not fold until all backwards"
+
+let tryFoldWhile () =
+    let a= (smallData ()).a
+    if not (33 = ( V.foldWhile (fun a v -> (a+v, true)) 0 a))
+    then failwith "not fold until all the way"
+    if not (11 = ( V.foldWhile (fun a v -> (a+v, false)) 0 a))
+    then failwith "not fold until once"
+    if not (22 = ( SV.foldWhile (fun a v -> (a+v, false)) 0 (V.rev a)))
+    then failwith "not fold until once rev"
+    if not (33 = ( SV.foldWhile (fun a v -> (a+v, true)) 0 (V.rev a)))
+    then failwith "not fold until all rev"
+
 let loo () =
     tryList ()
     tryEquals ()
     tryFirst ()
     trysize ()
     tryget ()
-    tryConcatAndAppend ()
+    tryAddAllAndAppend ()
     tryOfList ()
     trySet ()
     tryDrop ()
@@ -302,7 +324,8 @@ let loo () =
     tryRevReving ()
     trySubListing ()
     tryABitLarger ()
- 
+    tryFoldUntil ()
+    tryFoldWhile ()
     printfn "The skinny goat says all is nice and shiny"
     
 

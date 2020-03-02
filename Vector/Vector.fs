@@ -241,12 +241,12 @@ module rec Vector =
   let add element vector = Add.add element vector
   
   
-  let append (elements:'T list) vector : 'T Vector = 
+  let addAll (elements:'T list) vector : 'T Vector = 
     //plz optimize
     List.fold (fun a x -> add x a) vector elements
     
   let ofList elements = 
-    Vector.EMPTY  |> append elements 
+    Vector.EMPTY  |> addAll elements 
 
 
   let last vector : 'T option = get ((size vector) - 1) vector 
@@ -261,6 +261,13 @@ module rec Vector =
       else None
    
     let first v= get 0 v
+
+    let firstOrFail v = 
+       if 0 < v.n 
+       then if v.forward
+            then Get.getOrFail v.i v.v
+            else Get.getOrFail (v.i + v.n - 1) v.v 
+       else failwith "vector is empty" 
     
     let size subvector : int = subvector.n
     
@@ -301,12 +308,22 @@ module rec Vector =
       elif subvector.forward then Some {subvector with i = subvector.i + i
                                                        n = n
                                                        hash = -1}
-      else let i' = subvector.i + subvector.n  - i
-           Some {subvector with n = subvector.n - i
+      else Some {subvector with n = subvector.n - i
                                 i = subvector.n - i - n
                                 hash = -1} 
 
-    
+    let nextOrFail v =
+      if v.n = 0
+      then failwith "empty subvector"
+      elif v.n = 1 
+      then SubVector.EMPTY
+      elif v.forward
+      then { v with i = v.i + 1
+                    n = v.n - 1
+                    hash = -1 }
+      else { v with n = v.n - 1
+                    hash = -1} 
+
     let rec fold f a subvector =
       //Plz, optimize by running on each Leaf
       let mutable acc = a 
@@ -328,6 +345,36 @@ module rec Vector =
     
     let list  (subvector:'T SubVector) : 'T list = 
       foldback (fun x a -> x::a) subvector [] 
+
+   
+    let foldUntil (f: 'a->'x -> struct ('a * 'm option)) (seed:'a) (vector:'x SubVector) : ('a * 'm option) =
+      let rec foldav' (f' :OptimizedClosures.FSharpFunc<_,_,_>) (a:'a) (l : 'x SubVector) : struct ('a * 'm option) =
+        if size l = 0 
+        then struct (a, None)
+        else match f'.Invoke (a, firstOrFail l) with
+             | struct (a', Some m) -> struct (a', Some m)
+             | struct (a', None) -> foldav' f' a' (nextOrFail l)
+      match foldav' (OptimizedClosures.FSharpFunc<_,_,_>.Adapt f) seed vector with
+      | struct (a,m) -> a,m
+             
+(*
+  let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x list) : 'a =
+         let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x list) : 'a =
+             match xs with
+             | []      -> a
+             | x :: xs -> match f'.Invoke (a, x) with
+                          | struct (a', false) -> a'
+                          | struct (a', true) -> folda' f' a' xs
+         folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs 
+*)
+    let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x SubVector) : 'a =
+      let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x SubVector) : 'a =
+         if size xs = 0
+         then a
+         else match f'.Invoke (a, firstOrFail xs) with
+                      | struct (a', false) -> a'
+                      | struct (a', true) -> folda' f' a' (nextOrFail xs)
+      folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs
 
   module Add =
     let leafOfArray array = Leaf array
@@ -560,6 +607,16 @@ module rec Vector =
     | Some xs' -> SubVector.fold f a xs'
     | None -> a
 
+  let foldUntil f s v =
+    match sub 0 (size v) v with
+    | Some xs -> SubVector.foldUntil f s xs
+    | None -> (s, None)
+
+  let foldWhile f s v =
+    match sub 0 (size v) v with
+    | Some xs -> SubVector.foldWhile f s xs
+    | None -> s
+
   let map f xs = 
     fold (fun a x -> add (f x) a) Vector.EMPTY xs
 
@@ -570,7 +627,7 @@ module rec Vector =
          Vector.EMPTY
          xs
 
-  let concat tail vector = 
+  let append tail vector = 
     //plz optimize. We could add blockvise
     fold (fun a x -> Vector.add x a) vector tail
 
@@ -578,4 +635,15 @@ module rec Vector =
     if sub.i = 0 && sub.n = sub.v.size && sub.forward
     then sub.v
     else SubVector.fold (fun a x -> add x a) Vector.EMPTY sub
+
+  let concat (vecOfvec: 'T Vector Vector) :  'T Vector = 
+    fold (fun a v -> append v a) Vector.EMPTY vecOfvec
+
+
+  let bind (f:'T -> 'V Vector)  (v : 'T Vector) : 'V Vector = 
+    //Better append each in a fold?
+    map f v |> concat
+    
+ 
+
          
