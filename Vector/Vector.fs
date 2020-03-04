@@ -311,28 +311,29 @@ module rec Vector =
       else v.withLength (v.n - 1)
  
  /// combine result of recursivly processing each element
-    let rec fold f a (subvector: 'T SubVector) =
+    let fold f a (subvector: 'T SubVector) =
+      let f' = OptimizedClosures.FSharpFunc<_,_,_>.Adapt f
       //Plz, optimize by running on each Leaf
       let mutable acc = a 
       let v = subvector.v
       if subvector.forward
       then let ending = subvector.i + subvector.n - 1
            for i = subvector.i to ending do
-              acc <- f acc (Get.getOrFail i v)
+              acc <- f'.Invoke (acc, Get.getOrFail i v)
       else for i = subvector.i+subvector.n-1 downto subvector.i do
-              acc <- f acc (Get.getOrFail i v)
+              acc <- f'.Invoke (acc, Get.getOrFail i v)
       acc 
 /// reverse view of subvector
     let rev (subvector:'T SubVector) : 'T SubVector = 
        subvector.withForward (not subvector.forward)
                    
 /// fold from the back
-    let foldback f subvector a=
+    let foldBack f subvector a=
       fold (fun a x -> f x a) a (rev subvector)
 
  /// A list containing all elements in the same order
-    let list  (subvector:'T SubVector) : 'T list = 
-      foldback (fun x a -> x::a) subvector [] 
+    let toList  (subvector:'T SubVector) : 'T list = 
+      foldBack (fun x a -> x::a) subvector [] 
 
  /// combine result of recursivly processing each element until some additional value is returned 
     let foldUntil (f: 'a->'x -> struct ('a * 'm option)) (seed:'a) (vector:'x SubVector) : ('a * 'm option) =
@@ -560,7 +561,7 @@ module rec Vector =
     else SubVector (vector, 0, vector.size, false)
 
 /// list of all elements in same order
-  let list vector : 'T list = 
+  let toList vector : 'T list = 
     SubVector.fold (fun a x -> x::a) [] (rev vector)
 
 /// combine result of recursivly processing each element  
