@@ -25,7 +25,7 @@ let smallData () =
 let tryList () =
     let (a,b,c) = let data = smallData () 
                   (data.a, data.b, data.c)
-    if  (V.list a) = [11;22] |> not then failwith "Not added"
+    if  (V.toList a) = [11;22] |> not then failwith "Not added"
 
 let tryEquals () =
     let (a,b,c) = let data = smallData () 
@@ -125,7 +125,7 @@ let tryFilter ()=
 
 let tryCut ()=
   let a= (smallData ()).a
-  if not ((V.cut 1 a |> function Some v -> SV.list v
+  if not ((V.cut 1 a |> function Some v -> SV.toList v
                                | None -> failwith "was none") = [11])
   then failwith "no cut"
   if not (None = (V.cut 1 (V.empty ()))) 
@@ -136,7 +136,7 @@ let tryCut ()=
 
   if not (None = (V.cut -1 a)) 
   then failwith "emptyCut"
-  if not ((V.cut 0 (V.empty ()) |> function Some v -> SV.list v
+  if not ((V.cut 0 (V.empty ()) |> function Some v -> SV.toList v
                                           | None -> failwith "was none") = [])
   then failwith "no cut 0"
 
@@ -166,9 +166,9 @@ let tryOfSub ()=
 let subList () =
     let (a,sa) = let data = smallData () 
                  (data.a, data.sa)
-    if not (SV.list sa = V.list a)
+    if not (SV.toList sa = V.toList a)
     then failwith "lists are not equal"
-    if not ([] = (V.empty () |> V.rev |> SV.list))
+    if not ([] = (V.empty () |> V.rev |> SV.toList))
     then failwith "no empty sublist"
     
 let trySubGet () = 
@@ -246,10 +246,10 @@ let trySubFolds () =
     if not ([11;22] = SV.fold (fun a x -> x::a) [] ra)
     then failwith "not folding sum"
 
-    if not ([11;22] = SV.foldback (fun x a -> x::a) sa [])
+    if not ([11;22] = SV.foldBack (fun x a -> x::a) sa [])
     then failwith "not folding sum"
     
-    if not ([22;11] = SV.foldback (fun x a -> x::a) ra [])
+    if not ([22;11] = SV.foldBack (fun x a -> x::a) ra [])
     then failwith "not folding sum"
 
 let tryRevReving () =
@@ -261,10 +261,10 @@ let tryRevReving () =
 let trySubListing ()=
     let (sa,ra) = let data = smallData () 
                   (data.sa, data.ra)
-    if not ([11;22] = SV.list sa)
+    if not ([11;22] = SV.toList sa)
     then failwith "not listing sub"
 
-    if not ([22;11] = SV.list ra)
+    if not ([22;11] = SV.toList ra)
     then failwith "not listing rev"
 
 let tryABitLarger ()=
