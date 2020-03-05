@@ -671,9 +671,12 @@ module rec Vector =
       Seq.fold (fun a x -> Add.addBucket x a) dest (arrays src)
 
   let private appendToTail src dest = 
+      //This can be done blockwise
       fold (fun a x -> add x a) dest src
 
   let private transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
+
+     //What a mess. Clean up
       let available = Tools.roomInTail dest.size
       let arrays = Tools.arrays src.root 
       if Seq.isEmpty arrays
@@ -717,21 +720,12 @@ module rec Vector =
            let solution, finalCut = Seq.fold folding (withFullTail,remaining) tailArrays
            
            Array.fold (fun a v -> add v a) solution (Array.append finalCut src.tail)
-       // | [x] -> Array.fold (fun a v -> add v a) dest x
 
-  let duration s f = 
-    let timer = new System.Diagnostics.Stopwatch()
-    timer.Start()
-    let returnValue = f()
-    timer.Stop ()
-    let i = timer.ElapsedMilliseconds
-    if i > 0L 
-    then printfn "Elapsed Time: %s %i" s timer.ElapsedMilliseconds
-
-    returnValue    
+  
 
   let oldAppend = 
     appendToTail  
+
 /// vector with tail appended 
   let append (tail:'T Vector) (vector:'T Vector) = 
     if size vector = 0

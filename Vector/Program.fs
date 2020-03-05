@@ -270,6 +270,13 @@ let trySubListing ()=
     if not ([22;11] = SV.toList ra)
     then failwith "not listing rev"
 
+let tryBind () =
+    let a = V.ofList [1;2;3]
+    let x = V.ofList [0;1;0;2;0;3]
+    let y = V.bind (fun x -> V.ofList [0;x] ) a
+    if not (x = y)
+    then failwith "no bind"
+
 let mutable (data:Map<string, int64 list>)  = Map.empty
 let duration str f = 
     let timer = new System.Diagnostics.Stopwatch()
@@ -404,6 +411,7 @@ let loo () =
     trySubFolds ()
     tryRevReving ()
     trySubListing ()
+    tryBind ()
     performance 10000
     performance 100000
     performance 500000
