@@ -6,7 +6,7 @@ type internal Node<'T> = | Leaf of 'T array
 
 
 module private Tools =   
-    let  isOutOfBounds size i = 
+    let inline isOutOfBounds size i = 
          i < 0 || i >=size
     
     [<Literal>]
@@ -14,20 +14,20 @@ module private Tools =
       
     let BucketSize = 1 <<< BucketBits
      
-    let (>>>>) x y = System.Convert.ToInt32 ((uint32 x) >>> y)
+    let inline (>>>>) x y = System.Convert.ToInt32 ((uint32 x) >>> y)
     
-    let tailStartOffset size = 
+    let inline tailStartOffset size = 
          if size < BucketSize
          then 0  
          else ((size - 1) >>>> BucketBits) <<< BucketBits
     
-    let inTailIndex vecsize i =
+    let inline inTailIndex vecsize i =
         let t = tailStartOffset vecsize
         if i >= t
         then struct (true, i-t)
         else struct (false, 0)
     
-    let levels size =
+    let inline levels size =
          let size = size - 1
          if size < (BucketSize*BucketBits)
          then 1
@@ -38,20 +38,52 @@ module private Tools =
                 size <- size >>>> BucketBits
               levels
     
-    let indexOfArrayAt offset = offset &&& (BucketSize - 1)
+    let inline indexOfArrayAt offset = offset &&& (BucketSize - 1)
     
-    let shift levels = levels * BucketBits 
+    let inline shift levels = levels * BucketBits 
     
-    let indexAtLevel index level = indexOfArrayAt <| (index >>>> (shift level))
+    let inline indexAtLevel index level = indexOfArrayAt <| (index >>>> (shift level))
+    //Make tables of these
+    let inline range (from:int) (step:int) (until:int) : int list = [for i in from..step..until -> i]
     
-    let range (from:int) (step:int) (until:int) : int list = [for i in from..step..until -> i]
-    
-    let pathToValue size index =
+    let inline pathToValue size index =
          List.map (indexAtLevel index) <| range (levels size) -1 0
     
-    let pathToNode size index =
+    let inline pathToNode size index =
          List.map (indexAtLevel index) <| range (levels size) -1 1
+
+
+    let inline leafPaths size =
+      seq [0..BucketSize..size]
+      |> Seq.map (pathToNode size) 
     
+    let asSeq (root:'T Node) = 
+      let rec traverse (stack: (int * Node<'T>) list) = 
+        match stack with
+        | [] -> None
+        | ((i, node)::xs) -> 
+               match node with
+               | EmptyNode -> traverse xs   
+               | Leaf ar -> if i < Array.length ar
+                            then Some ((Array.get ar i), ((i + 1, node) :: xs))
+                            else traverse xs
+               | Branch ar -> if i < Array.length ar
+                              then traverse ((0, Array.get ar i) :: ((i + 1, node) :: xs))
+                              else traverse xs
+      Seq.unfold traverse [(0,root)]
+
+    let inline arrays (root:'T Node) = 
+         let rec traverse (stack: (int * Node<'T>) list) = 
+           match stack with
+           | [] -> None
+           | ((i, node)::xs) -> 
+                  match node with
+                  | EmptyNode -> traverse xs   
+                  | Leaf ar -> Some (ar, xs)
+                  | Branch ar -> if i < Array.length ar
+                                 then traverse ((0, Array.get ar i) :: ((i + 1, node) :: xs))
+                                 else traverse xs
+         Seq.unfold traverse [(0,root)]
     let isInTail index size =
          index >= (tailStartOffset size)
     
@@ -65,7 +97,7 @@ module private Tools =
                       | _ -> failwith "Should be Branch"
          | [] -> failwith "empty path"
     
-    let arrayFor index size root tail =
+    let inline arrayFor index size root tail =
       if isOutOfBounds size index  then failwith "Outofbounds"
       elif isInTail index size then tail
       else let path = pathToValue size index
@@ -86,7 +118,7 @@ module private Tools =
                    | EmptyNode -> failwith "Got emptyNode"
                    | Leaf _ -> failwith "Got leaf"
     
-    let  getInNode index size tail root =
+    let inline getInNode index size tail root =
         if isOutOfBounds size index
         then failwith "out of bounds"
         match inTailIndex size index with
@@ -95,13 +127,13 @@ module private Tools =
                       valueIn path root
     
     
-    let tailSize size = size - (tailStartOffset size)
+    let inline tailSize size = size - (tailStartOffset size)
     
-    let isFullTail size = tailSize size >= BucketSize
+    let inline isFullTail size = tailSize size >= BucketSize
     
-    let roomInTail size = BucketSize - (tailSize size)
+    let inline roomInTail size = BucketSize - (tailSize size)
     
-    let isFullRoot size levels = 
+    let inline isFullRoot size levels = 
       (size >>>> BucketBits) > (1 <<< (shift levels))
     
 /// A persistent immutable random access list that grows in the tail
@@ -377,6 +409,8 @@ module rec Vector =
                                  <| Tools.levels vec.size
                                  <| vec.tail
       vec.withRootTailSize newRoot (Array.singleton v) (vec.size + 1)
+
+
       
     let atIndex  = Array.tryItem
 
@@ -419,6 +453,8 @@ module rec Vector =
       let newTail = Array.singleton v
       vector.withRootTailSize newRoot newTail (vector.size + 1)
 
+   
+
     let withPushedIntoTree (vector:'T Vector) v =
         let size = vector.size
         let levels = Tools.levels size
@@ -434,8 +470,41 @@ module rec Vector =
       then withPushedIntoTree vector element
       else withPushedIntoTail vector element
 
+    let withPushedNodeIntoDeeperTree (vec:'T Vector) newTail = 
+        let currentRoot = vec.root
+        let newRoot = newLevelRoot currentRoot
+                                   <| Tools.levels vec.size
+                                   <| vec.tail
+        vec.withRootTailSize newRoot newTail (vec.size + Array.length newTail)
+
+    let withPushedNodeIntoEquallySizedTree (vector:'T Vector) newTail= 
+            let size = vector.size 
+            let last = vector.size - 1
+            let path = Tools.pathToNode size last 
+            let newNode = leafOfArray vector.tail
+            let newRoot = withNodeIn path vector.root newNode
+            vector.withRootTailSize newRoot newTail (vector.size + Array.length newTail)
+
+    let withPushedNodeIntoTree (vector:'T Vector) newTail =
+        let size = vector.size
+        let levels = Tools.levels size
+        if Tools.isFullRoot size levels
+        then withPushedNodeIntoDeeperTree vector newTail
+        else withPushedNodeIntoEquallySizedTree vector newTail
+
+    let addBucket array (vector: 'T Vector) =
+      
+       if  (Array.length array > Tools.BucketSize)
+       then failwith "trying to add more than a bucket"
+       elif vector.size = 0
+       then vector.withTailSize array (Array.length array)
+       elif not (Tools.isFullTail vector.size)
+             then failwith "not full tail"
+       else
+         withPushedNodeIntoTree vector array
+
   module private Modify =
-    let isAtEnd i (vec:'T Vector) = vec.size = i
+    let inline isAtEnd i (vec:'T Vector) = vec.size = i
     let rec nodeWith path node value = 
       match path with
       | [i'] -> match node with 
@@ -457,7 +526,7 @@ module rec Vector =
                                       Array.set a i' value
                                       a)
       | false,_ -> let path = Tools.pathToValue vector.size i
-                   vector.withRoot  (nodeWith path vector.root value)
+                   vector.withRoot (nodeWith path vector.root value)
     let set i v vec =
       if isAtEnd i vec then Add.add v vec |> Some
       elif Tools.isOutOfBounds vec.size i then None
@@ -565,11 +634,14 @@ module rec Vector =
     SubVector.fold (fun a x -> x::a) [] (rev vector)
 
 /// combine result of recursivly processing each element  
-  let fold f a xs =
-    match sub 0 (size xs) xs with
-    | Some xs' -> SubVector.fold f a xs'
-    | None -> a
-
+  let fold (f:'a -> 'T -> 'a) (a:'a) (xs:'T Vector) : 'a   =
+    let all = Seq.append (Tools.arrays xs.root) (Seq.singleton xs.tail)
+    let mutable res = a 
+    for ar in all do
+      for e in ar do
+        res <- f res e
+    res
+        
 /// combine result of recursivly processing each element until some additional value is returned 
   let foldUntil f s v =
     match sub 0 (size v) v with
@@ -594,11 +666,76 @@ module rec Vector =
          Vector.EMPTY
          xs
 
-/// vector with tail appended 
-  let append tail vector = 
-    //plz optimize. We could add blockvise
-    fold (fun a x -> Vector.add x a) vector tail
+  
+  let private transferBlocks src dest = 
+      Seq.fold (fun a x -> Add.addBucket x a) dest (arrays src)
 
+  let private appendToTail src dest = 
+      //This can be done blockwise
+      fold (fun a x -> add x a) dest src
+
+  let private transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
+
+     //What a mess. Clean up
+      let available = Tools.roomInTail dest.size
+      let arrays = Tools.arrays src.root 
+      if Seq.isEmpty arrays
+      then Array.fold (fun a v -> add v a) dest src.tail
+      else 
+           let headArray = Seq.head arrays
+           let tailArrays = Seq.tail arrays
+           
+           let (s:int seq) = seq {0..(available-1)}
+           let withFullTail = Seq.fold (fun a v -> add (Array.get headArray v ) a) dest s
+           let remainSize = (Tools.BucketSize - available )
+           let fillSize = Tools.BucketSize - remainSize
+           let remaining = Array.zeroCreate remainSize
+           Array.blit headArray available remaining 0  remainSize
+           let folding (dest,remain) x = 
+                                       
+                                         if (Array.length x) = Tools.BucketSize
+                                         then let toAdd = Array.zeroCreate Tools.BucketSize
+                                              Array.blit remain 0 toAdd 0 remainSize
+                                              Array.blit x 0 toAdd remainSize fillSize
+                                              Array.blit x  fillSize remain 0 remainSize
+                                              (Add.addBucket toAdd dest), remain
+                                         elif Array.length x <= fillSize 
+                                         then let newRemainSize = remainSize + Array.length x
+                                               
+                                              let newRemain = Array.zeroCreate newRemainSize
+           
+                                              Array.blit remain 0 newRemain 0 remainSize
+                                              Array.blit x 0 newRemain remainSize (Array.length x)
+                                              dest, newRemain
+                                         else 
+                                              let toAdd = Array.zeroCreate Tools.BucketSize
+                                              Array.blit remain 0 toAdd 0 remainSize
+                                              Array.blit x 0 toAdd remainSize fillSize
+           
+                                              let newRemainSize = (Array.length x) - fillSize
+                                              let newRemain = Array.zeroCreate newRemainSize
+                                              Array.blit x fillSize newRemain 0 newRemainSize
+                                              (Add.addBucket toAdd dest), newRemain
+                                              
+           let solution, finalCut = Seq.fold folding (withFullTail,remaining) tailArrays
+           
+           Array.fold (fun a v -> add v a) solution (Array.append finalCut src.tail)
+
+  
+
+  let oldAppend = 
+    appendToTail  
+
+/// vector with tail appended 
+  let append (tail:'T Vector) (vector:'T Vector) = 
+    if size vector = 0
+    then tail
+    elif Tools.isFullTail vector.size 
+    then transferBlocks tail vector
+    elif tail.size >= Tools.roomInTail vector.size 
+    then transferSubBlocks tail vector
+    else appendToTail tail vector
+    
 /// A real vector of all elements found in a subvector
   let ofSub (sub:'T SubVector) =
     if sub.i = 0 && sub.n = sub.v.size && sub.forward
@@ -613,7 +750,14 @@ module rec Vector =
   let bind (f:'T -> 'V Vector)  (v : 'T Vector) : 'V Vector = 
     //Better append each in a fold?
     map f v |> concat
-    
+
+// experiments 
+  let leafpaths s = Tools.leafPaths s |> Seq.toList
+  let sequence (v:'T Vector) = Seq.append (Tools.asSeq v.root |> Seq.toList)
+                                          (Array.toSeq v.tail)
+
+  let arrays (v) = Seq.append (Tools.arrays v.root)
+                              (Seq.singleton v.tail)
  
 
          

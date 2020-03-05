@@ -3,6 +3,9 @@ module Program
 module V = col.Vector
 type intVector = col.Vector<int>
 module SV = col.Vector.SubVector
+
+  
+     
 let smallData () =
     let emptyInt = intVector.EMPTY
     let a = 
@@ -267,17 +270,101 @@ let trySubListing ()=
     if not ([22;11] = SV.toList ra)
     then failwith "not listing rev"
 
-let tryABitLarger ()=
-    let n = 1900
-    let r = List.fold (fun a v -> V.add v a) (V.empty ()) [0..n]  
-    List.iter (fun x -> if not (Some x = V.get x r) then failwith "unexpected when indexing bigger") [0..n]
-    let r = List.fold (fun a x -> (V.set x (1 + (V.get x r).Value) a).Value) r [0..n]
-    List.iter (fun x -> if not (Some (x+1) = V.get x r) then failwith "unexpected when modifying bigger") [0..n]
+let tryBind () =
+    let a = V.ofList [1;2;3]
+    let x = V.ofList [0;1;0;2;0;3]
+    let y = V.bind (fun x -> V.ofList [0;x] ) a
+    if not (x = y)
+    then failwith "no bind"
 
-    let r = List.fold (fun a v -> V.add v a) (V.empty ()) [0..1056] 
-    let r = List.fold (fun a v -> (V.pop a).Value) r [0..1056]
-    if not (r=V.empty ()) then failwith "not emptied"
+let mutable (data:Map<string, int64 list>)  = Map.empty
+let duration str f = 
+    let timer = new System.Diagnostics.Stopwatch()
+    timer.Start()
+    let returnValue = f()
+    timer.Stop ()
+    match Map.tryFind str data with
+    | Some l -> data <- Map.add  str ((timer.ElapsedMilliseconds)::l) data
+    | None -> data <- Map.add  str [timer.ElapsedMilliseconds] data
+   
+    returnValue  
 
+let performanceCopyOnWrite n = 
+   duration (sprintf "Add copyOnWrite %i" n) 
+                    (fun _ -> List.fold (fun (a:System.Collections.Generic.List<int>) v ->
+                                             let b =System.Collections.Generic.List<int> a
+                                             b.Add v |> ignore
+                                             b) 
+                                         ( System.Collections.Generic.List<int> ()) 
+                                         [0..n]) |> ignore
+let performance n =
+   
+   for y in [0..2] do
+      printfn "%i %i" n y 
+      let r = duration  (sprintf "Add %i" n)  
+                        (fun _ -> List.fold (fun a v -> V.add v a) (V.empty ()) [0..n])
+      duration  (sprintf "Add linked list %i" n)  
+                        (fun _ -> List.fold (fun a v -> v::a) ([]) [0..n]) |> ignore
+      duration  (sprintf "Add linked reverse %i" n)  
+                   (fun _ -> List.fold (fun a v -> v::a) ([]) [0..n]) |> List.rev |> ignore
+      let al = duration (sprintf "Add Generic List %i" n) 
+                        (fun _ -> List.fold (fun (a:System.Collections.Generic.List<int>) v -> 
+                                                a.Add v |> ignore
+                                                a) 
+                                            ( System.Collections.Generic.List<int> ()) 
+                                            [0..n])
+
+      duration (sprintf "Get %i" n) 
+               (fun x -> List.iter (fun x -> if not (Some x = V.get x r) 
+                                             then failwith "unexpected when indexing bigger") 
+                                   [0..n])
+      duration (sprintf "Get Generic List %i" n)
+               (fun x -> List.iter (fun (x:int) -> if not (Some x = Some (al.[x]) ) 
+                                                   then failwith "unexpected when indexing bigger") 
+                                   [0..n])
+      let r = duration (sprintf "Set %i" n) 
+                       (fun x -> List.fold (fun a x -> (let inc = 1 + (V.get x r).Value
+                                                       V.set x inc a).Value) 
+                                           r 
+                                           [0..n])
+      let al = duration ( sprintf "Set Generic list %i" n) 
+                        (fun x -> List.fold (fun (a:System.Collections.Generic.List<int>) x -> 
+                                                  let inc = 1 + (Some (al.[x])).Value
+                                                  a.[x] <- inc
+                                                  (Some a).Value ) 
+                                            al 
+                                            [0..n])
+      
+      List.iter (fun x -> if not (Some (x+1) = V.get x r) then failwith "unexpected when modifying bigger") [0..n]
+
+      let n32 = List.fold (fun a v -> V.add v a) (V.empty ()) [1..32]
+      let n15 = List.fold (fun a v -> V.add v a) (V.empty ()) [1..15]
+      let appended = duration (sprintf "append to 32 %i" n)  
+                              (fun _ -> V.append r n32)
+      let appended = duration (sprintf "append to 15 %i" n)  
+                              (fun _ -> V.append r n15)
+      let appended = duration (sprintf "old append to empty %i" n) 
+                              (fun _ -> V.oldAppend r (V.empty ()))
+      let l32 = List.fold (fun (a:System.Collections.Generic.List<int>) v -> 
+                                      a.Add v
+                                      a) 
+                          (System.Collections.Generic.List<int> ()) [1..32]
+      duration (sprintf "append to 32 list %i" n) 
+               (fun _ -> (l32).AddRange al)
+
+      duration (sprintf "fold %i" n) (fun () -> V.fold (+) 0 r) |> ignore
+      duration (sprintf "fold subvec %i" n) (fun () -> SV.fold (+) 0 (V.sub 0 (V.size r) r).Value) |> ignore
+       
+
+   let r = List.fold (fun a v -> V.add v a) (V.empty ()) [0..1056] 
+   let r = List.fold (fun a v -> (V.pop a).Value) r [0..1056]
+   if not (r=V.empty ()) then failwith "not emptied"
+
+let printData () =
+  Map.iter (fun k v -> List.sort v
+                       |> List.item (((List.length v)/2)) 
+                       |> printfn "%s:%i" k) 
+                       data
 let tryFoldUntil () =
     let a= (smallData ()).a
     if not ((33, None) = ( V.foldUntil (fun a v -> (a+v, None)) 0 a))
@@ -299,6 +386,7 @@ let tryFoldWhile () =
     then failwith "not fold until once rev"
     if not (33 = ( SV.foldWhile (fun a v -> (a+v, true)) 0 (V.rev a)))
     then failwith "not fold until all rev"
+
 
 let loo () =
     tryList ()
@@ -323,10 +411,20 @@ let loo () =
     trySubFolds ()
     tryRevReving ()
     trySubListing ()
-    tryABitLarger ()
+    tryBind ()
+    performance 10000
+    performance 100000
+    performance 500000
+    performanceCopyOnWrite 10000
     tryFoldUntil ()
     tryFoldWhile ()
+    printData ()
     printfn "The skinny goat says all is nice and shiny"
+ //   printfn "%A" (V.leafpaths 250)
+   // let x = List.fold (fun a v -> V.add v a) (V.empty ()) [0..120] 
+  //  printfn "%A" (V.sequence x |> Seq.toList)
+   // printfn "%A" (V.arrays x |> Seq.toList)
+
     
 
 [<EntryPoint>]
