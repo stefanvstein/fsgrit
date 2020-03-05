@@ -281,8 +281,18 @@ let duration str f =
     | None -> data <- Map.add  str [timer.ElapsedMilliseconds] data
    
     returnValue  
-let tryABitLarger n =
-   for y in [0..4] do
+
+let performanceCopyOnWrite n = 
+   duration (sprintf "Add copyOnWrite %i" n) 
+                    (fun _ -> List.fold (fun (a:System.Collections.Generic.List<int>) v ->
+                                             let b =System.Collections.Generic.List<int> a
+                                             b.Add v |> ignore
+                                             b) 
+                                         ( System.Collections.Generic.List<int> ()) 
+                                         [0..n]) |> ignore
+let performance n =
+   
+   for y in [0..2] do
       printfn "%i %i" n y 
       let r = duration  (sprintf "Add %i" n)  
                         (fun _ -> List.fold (fun a v -> V.add v a) (V.empty ()) [0..n])
@@ -296,15 +306,6 @@ let tryABitLarger n =
                                                 a) 
                                             ( System.Collections.Generic.List<int> ()) 
                                             [0..n])
-      if n < 20000
-      then duration (sprintf "Add copyOnWrite %i" n) 
-                    (fun _ -> List.fold (fun (a:System.Collections.Generic.List<int>) v ->
-                                          
-                                             let b =System.Collections.Generic.List<int> a
-                                             b.Add v |> ignore
-                                             b) 
-                                         ( System.Collections.Generic.List<int> ()) 
-                                         [0..n]) |> ignore
 
       duration (sprintf "Get %i" n) 
                (fun x -> List.iter (fun x -> if not (Some x = V.get x r) 
@@ -341,9 +342,11 @@ let tryABitLarger n =
                                       a.Add v
                                       a) 
                           (System.Collections.Generic.List<int> ()) [1..32]
-      duration (sprintf "append to empty list %i" n) 
+      duration (sprintf "append to 32 list %i" n) 
                (fun _ -> (l32).AddRange al)
-      
+
+      duration (sprintf "fold %i" n) (fun () -> V.fold (+) 0 r) |> ignore
+      duration (sprintf "fold subvec %i" n) (fun () -> SV.fold (+) 0 (V.sub 0 (V.size r) r).Value) |> ignore
        
 
    let r = List.fold (fun a v -> V.add v a) (V.empty ()) [0..1056] 
@@ -352,7 +355,7 @@ let tryABitLarger n =
 
 let printData () =
   Map.iter (fun k v -> List.sort v
-                       |> List.item ((List.length v)/2) 
+                       |> List.item (((List.length v)/2)) 
                        |> printfn "%s:%i" k) 
                        data
 let tryFoldUntil () =
@@ -401,10 +404,10 @@ let loo () =
     trySubFolds ()
     tryRevReving ()
     trySubListing ()
-    tryABitLarger 10000
-    tryABitLarger 100000
-    tryABitLarger 500000
-    
+    performance 10000
+    performance 100000
+    performance 500000
+    performanceCopyOnWrite 10000
     tryFoldUntil ()
     tryFoldWhile ()
     printData ()

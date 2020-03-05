@@ -634,11 +634,14 @@ module rec Vector =
     SubVector.fold (fun a x -> x::a) [] (rev vector)
 
 /// combine result of recursivly processing each element  
-  let fold f a xs =
-    match sub 0 (size xs) xs with
-    | Some xs' -> SubVector.fold f a xs'
-    | None -> a
-
+  let fold (f:'a -> 'T -> 'a) (a:'a) (xs:'T Vector) : 'a   =
+    let all = Seq.append (Tools.arrays xs.root) (Seq.singleton xs.tail)
+    let mutable res = a 
+    for ar in all do
+      for e in ar do
+        res <- f res e
+    res
+        
 /// combine result of recursivly processing each element until some additional value is returned 
   let foldUntil f s v =
     match sub 0 (size v) v with
