@@ -377,7 +377,7 @@ module Vector =
     let  appendToTail src dest = 
         //This can be done blockwise
         Get.fold (fun a x -> Add.add x a) dest src
-   
+
     let  transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
    
        //What a mess. Clean up
@@ -524,10 +524,15 @@ module Vector =
   let first (vector:'T Vector) = get 0 vector
 /// number of elements in the vector 
   let size (vector:_ Vector) = vector.size
+  
+  let isEmpty v = size v = 0
 
 /// returns a vector with attitional element in the tail 
   let add element vector = Add.add element vector
   
+  let singleton e = empty ()
+                    |> add e
+
  /// add all elements, int the same order
   let addAll (elements:'T list) vector : 'T Vector = 
     //plz optimize
@@ -561,7 +566,8 @@ module Vector =
        else failwith "vector is empty" 
 ///number of elements the subvector respresents    
     let size (subvector:'T SubVector) : int = subvector.n
-
+    
+    let isEmpty v = size v = 0
 /// last element in the vector, most recently appended    
     let last (subvector: 'T SubVector) : 'T option = 
       get (size subvector - 1 ) subvector

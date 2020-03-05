@@ -39,6 +39,12 @@ let tryEquals () =
     if a = c 
     then failwith "Should not be equal"
 
+let tryHash () =
+    let a = [1,2,3]
+    let b = V.ofList a
+    if not (a.GetHashCode () = b.GetHashCode())
+    then failwith "hash"
+
 let tryFirst () =
     let a= (smallData ()).a 
     if not (Some 11 = (V.first a)) then failwith "not first"
@@ -390,6 +396,7 @@ let tryFoldWhile () =
 let loo () =
     tryList ()
     tryEquals ()
+    tryHash ()
     tryFirst ()
     trysize ()
     tryget ()
