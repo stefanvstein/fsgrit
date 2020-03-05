@@ -188,6 +188,14 @@ module private Get =
         
     let getOrFail (index:int) (vector:'T Vector) =
       getInNode index vector.size vector.tail vector.root  
+
+    let fold f a (xs: 'T Vector)=
+      let all = Seq.append (Tools.arrays xs.root) (Seq.singleton xs.tail)
+      let mutable res = a 
+      for ar in all do
+        for e in ar do
+          res <- f res e
+      res
    
 /// As subvector is a portion of a vector, possibly in reverse order. This is a view
 type SubVector<'T when 'T : equality> private (v:Vector<'T>, i :int , n:int ,forward :bool, hash:int) = 
@@ -325,9 +333,11 @@ module Vector =
       then withPushedIntoTree vector element
       else withPushedIntoTail vector element
 
+
+  module private AddMany =
     let withPushedNodeIntoDeeperTree (vec:'T Vector) newTail = 
         let currentRoot = vec.root
-        let newRoot = newLevelRoot currentRoot
+        let newRoot = Add.newLevelRoot currentRoot
                                    <| Tools.levels vec.size
                                    <| vec.tail
         vec.withRootTailSize newRoot newTail (vec.size + Array.length newTail)
@@ -336,8 +346,8 @@ module Vector =
             let size = vector.size 
             let last = vector.size - 1
             let path = Tools.pathToNode size last 
-            let newNode = leafOfArray vector.tail
-            let newRoot = withNodeIn path vector.root newNode
+            let newNode = Add.leafOfArray vector.tail
+            let newRoot = Add.withNodeIn path vector.root newNode
             vector.withRootTailSize newRoot newTail (vector.size + Array.length newTail)
 
     let withPushedNodeIntoTree (vector:'T Vector) newTail =
@@ -357,6 +367,65 @@ module Vector =
              then failwith "not full tail"
        else
          withPushedNodeIntoTree vector array
+
+    let transferBlocks (src:'T Vector) (dest: 'T Vector) = 
+        Seq.fold (fun a x -> addBucket x a) 
+                 dest 
+                 (Seq.append (Tools.arrays src.root)
+                             (Seq.singleton src.tail))
+   
+    let  appendToTail src dest = 
+        //This can be done blockwise
+        Get.fold (fun a x -> Add.add x a) dest src
+   
+    let  transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
+   
+       //What a mess. Clean up
+        let available = Tools.roomInTail dest.size
+        let arrays = Tools.arrays src.root 
+        if Seq.isEmpty arrays
+        then Array.fold (fun a v -> Add.add v a) dest src.tail
+        else 
+             let headArray = Seq.head arrays
+             let tailArrays = Seq.tail arrays
+             
+             let (s:int seq) = seq {0..(available-1)}
+             let withFullTail = Seq.fold (fun a v -> Add.add (Array.get headArray v ) a) dest s
+             let remainSize = (Tools.BucketSize - available )
+             let fillSize = Tools.BucketSize - remainSize
+             let remaining = Array.zeroCreate remainSize
+             Array.blit headArray available remaining 0  remainSize
+             let folding (dest,remain) x = 
+                                         
+                                           if (Array.length x) = Tools.BucketSize
+                                           then let toAdd = Array.zeroCreate Tools.BucketSize
+                                                Array.blit remain 0 toAdd 0 remainSize
+                                                Array.blit x 0 toAdd remainSize fillSize
+                                                Array.blit x  fillSize remain 0 remainSize
+                                                (addBucket toAdd dest), remain
+                                           elif Array.length x <= fillSize 
+                                           then let newRemainSize = remainSize + Array.length x
+                                                 
+                                                let newRemain = Array.zeroCreate newRemainSize
+             
+                                                Array.blit remain 0 newRemain 0 remainSize
+                                                Array.blit x 0 newRemain remainSize (Array.length x)
+                                                dest, newRemain
+                                           else 
+                                                let toAdd = Array.zeroCreate Tools.BucketSize
+                                                Array.blit remain 0 toAdd 0 remainSize
+                                                Array.blit x 0 toAdd remainSize fillSize
+             
+                                                let newRemainSize = (Array.length x) - fillSize
+                                                let newRemain = Array.zeroCreate newRemainSize
+                                                Array.blit x fillSize newRemain 0 newRemainSize
+                                                (addBucket toAdd dest), newRemain
+                                                
+             let solution, finalCut = Seq.fold folding (withFullTail,remaining) tailArrays
+             
+             Array.fold (fun a v -> Add.add v a) solution (Array.append finalCut src.tail)
+   
+
 
   module private Modify =
     let inline isAtEnd i (vec:'T Vector) = vec.size = i
@@ -635,12 +704,8 @@ module Vector =
 
 /// combine result of recursivly processing each element  
   let fold (f:'a -> 'T -> 'a) (a:'a) (xs:'T Vector) : 'a   =
-    let all = Seq.append (Tools.arrays xs.root) (Seq.singleton xs.tail)
-    let mutable res = a 
-    for ar in all do
-      for e in ar do
-        res <- f res e
-    res
+    Get.fold f a xs
+    
         
 /// combine result of recursivly processing each element until some additional value is returned 
   let foldUntil f s v =
@@ -666,77 +731,16 @@ module Vector =
          Vector.EMPTY
          xs
 
-  let arrays (v : 'a Vector) = Seq.append (Tools.arrays v.root)
-                                          (Seq.singleton v.tail)
-  
-  let private transferBlocks src dest = 
-      Seq.fold (fun a x -> Add.addBucket x a) dest (arrays src)
-
-  let private appendToTail src dest = 
-      //This can be done blockwise
-      fold (fun a x -> add x a) dest src
-
-  let private transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
-
-     //What a mess. Clean up
-      let available = Tools.roomInTail dest.size
-      let arrays = Tools.arrays src.root 
-      if Seq.isEmpty arrays
-      then Array.fold (fun a v -> add v a) dest src.tail
-      else 
-           let headArray = Seq.head arrays
-           let tailArrays = Seq.tail arrays
-           
-           let (s:int seq) = seq {0..(available-1)}
-           let withFullTail = Seq.fold (fun a v -> add (Array.get headArray v ) a) dest s
-           let remainSize = (Tools.BucketSize - available )
-           let fillSize = Tools.BucketSize - remainSize
-           let remaining = Array.zeroCreate remainSize
-           Array.blit headArray available remaining 0  remainSize
-           let folding (dest,remain) x = 
-                                       
-                                         if (Array.length x) = Tools.BucketSize
-                                         then let toAdd = Array.zeroCreate Tools.BucketSize
-                                              Array.blit remain 0 toAdd 0 remainSize
-                                              Array.blit x 0 toAdd remainSize fillSize
-                                              Array.blit x  fillSize remain 0 remainSize
-                                              (Add.addBucket toAdd dest), remain
-                                         elif Array.length x <= fillSize 
-                                         then let newRemainSize = remainSize + Array.length x
-                                               
-                                              let newRemain = Array.zeroCreate newRemainSize
-           
-                                              Array.blit remain 0 newRemain 0 remainSize
-                                              Array.blit x 0 newRemain remainSize (Array.length x)
-                                              dest, newRemain
-                                         else 
-                                              let toAdd = Array.zeroCreate Tools.BucketSize
-                                              Array.blit remain 0 toAdd 0 remainSize
-                                              Array.blit x 0 toAdd remainSize fillSize
-           
-                                              let newRemainSize = (Array.length x) - fillSize
-                                              let newRemain = Array.zeroCreate newRemainSize
-                                              Array.blit x fillSize newRemain 0 newRemainSize
-                                              (Add.addBucket toAdd dest), newRemain
-                                              
-           let solution, finalCut = Seq.fold folding (withFullTail,remaining) tailArrays
-           
-           Array.fold (fun a v -> add v a) solution (Array.append finalCut src.tail)
-
-  
-
-  let oldAppend = 
-    appendToTail  
 
 /// vector with tail appended 
   let append (tail:'T Vector) (vector:'T Vector) = 
     if size vector = 0
     then tail
     elif Tools.isFullTail vector.size 
-    then transferBlocks tail vector
+    then AddMany.transferBlocks tail vector
     elif tail.size >= Tools.roomInTail vector.size 
-    then transferSubBlocks tail vector
-    else appendToTail tail vector
+    then AddMany.transferSubBlocks tail vector
+    else AddMany.appendToTail tail vector
     
 /// A real vector of all elements found in a subvector
   let ofSub (sub:'T SubVector) =
@@ -753,9 +757,7 @@ module Vector =
     //Better append each in a fold?
     map f v |> concat
 
-// experiments 
-  let leafpaths s = Tools.leafPaths s |> Seq.toList
-  let sequence (v:'T Vector) = Seq.append (Tools.asSeq v.root |> Seq.toList)
+  let toSeq (v:'T Vector) = Seq.append (Tools.asSeq v.root |> Seq.toList)
                                           (Array.toSeq v.tail)
 
  

@@ -343,8 +343,7 @@ let performance n =
                               (fun _ -> V.append r n32)
       let appended = duration (sprintf "append to 15 %i" n)  
                               (fun _ -> V.append r n15)
-      let appended = duration (sprintf "old append to empty %i" n) 
-                              (fun _ -> V.oldAppend r (V.empty ()))
+
       let l32 = List.fold (fun (a:System.Collections.Generic.List<int>) v -> 
                                       a.Add v
                                       a) 
