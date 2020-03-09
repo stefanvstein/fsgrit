@@ -136,8 +136,8 @@ module private Tools =
     let inline isFullRoot size levels = 
       (size >>>> BucketBits) > (1 <<< (shift levels))
     
-/// A persistent immutable random access list that grows in the tail
-/// Mutation is represented by logically new lists, that share data with previos, and maintain the same algoritmic complexity
+/// A persistent immutable random access list that grows in the tail.
+/// Mutation is represented logically by new lists, that share data with previos, and maintain the same algoritmic complexity
 /// Access is typically O log32 n
 type Vector<'T when 'T : equality>  private (size:int, root : 'T Node, tail : 'T array, hash :int) = 
   let mutable hash = hash
@@ -457,56 +457,46 @@ module Vector =
       else modify i v vec |> Some
 
   module private Delete =
-    let rec rootWithoutLast path node =
-      match path with
-      | [i] -> if i = 0
-               then EmptyNode 
-               else match node with        
-                    | Branch ar -> let na = Array.zeroCreate i
-                                   Array.blit ar 0 na 0 i
-                                   Branch na
-                    | Leaf _ -> failwith "Should not be a leaf"
-                    | EmptyNode -> failwith "Should not be empty node"
 
-                                   
-      | (i::is) -> match node with
-                   | Branch ar -> let nc = rootWithoutLast is (Array.get ar i) 
-                                  let na = Array.copy ar
-                                  Array.set na i nc
-                                  Branch na
-                   | Leaf _ -> failwith "Should not be leaf"
-                   | EmptyNode -> failwith "Should not be Empty node"
-      | [] -> failwith "no path"
+    let rec arrayOfLastLeaf node =
+      match node with
+      | Branch ar -> Array.last ar
+                     |> arrayOfLastLeaf 
+      | Leaf ar -> ar
+      | EmptyNode -> failwith "found empty node"
 
-    let indexOfLastAfterWithout (vec:'T Vector) = vec.size - 2
+    let rec nodeWithoutLast node =
+      match node with 
+      | Branch ar -> let arraylen = Array.length ar
+                     match Array.last ar |> nodeWithoutLast with
+                     | EmptyNode -> if arraylen = 1 
+                                    then EmptyNode
+                                    else let newArrayLen = arraylen - 1
+                                         let newArray = Array.zeroCreate newArrayLen
+                                         Array.blit ar 0 newArray 0 newArrayLen
+                                         Branch newArray
+                     | Branch _ as b-> let newArray = Array.copy ar 
+                                       Array.set newArray (arraylen - 1) b
+                                       Branch newArray
+                     | Leaf _ -> failwith "found a leaf"
 
-    let secondIsEmpty root  =    
-      match root with 
-           | Branch ar ->  Array.length ar > 1 && Array.get ar 1 = EmptyNode                        
-           | _ -> false
+      | Leaf ar -> EmptyNode
+      | EmptyNode -> failwith "found empty node"
 
-    let withoutInTree (vec:'T Vector) =
-      let path = Tools.pathToNode vec.size (indexOfLastAfterWithout vec)
-      let newRoot = rootWithoutLast path vec.root
-      let newTail = Tools.arrayFor (vec.size - 2) vec.size vec.root vec.tail
-      if Tools.levels vec.size > 1 && secondIsEmpty newRoot 
-      then let nextRoot = match newRoot with
-                          | Branch ar -> Array.get ar 0
-                          | _ -> failwith "There is no branch"
-           vec.withRootTailSize nextRoot
-                                newTail
-                                (vec.size - 1)
-      else vec.withRootTailSize newRoot newTail (vec.size - 1)
+    let withoutInTree (v: 'T Vector) =
+      let newRoot = nodeWithoutLast v.root
+      let newTail = arrayOfLastLeaf v.root
+      v.withRootTailSize newRoot newTail (v.size - 1)  
 
     let without (vector:'T Vector) =
-      let i = vector.size - 1
-      match Tools.inTailIndex vector.size i with
-      | true, 0 -> withoutInTree vector //
-      | true, i' -> let newTail = let a = Array.zeroCreate i'
-                                  Array.blit vector.tail 0 a 0 i'
-                                  a
-                    vector.withTailSize newTail (vector.size - 1) 
-      | false, _ -> failwith "there is no tail"
+      let tailSize = Array.length vector.tail 
+      if tailSize > 1
+      then let newTailSize = tailSize - 1
+           let newTail = let a = Array.zeroCreate newTailSize
+                         Array.blit vector.tail 0 a 0 newTailSize
+                         a
+           vector.withTailSize newTail (vector.size - 1)
+      else withoutInTree vector
 
     let pop (vec:'T Vector) = 
       if vec.size = 0 then None
@@ -739,7 +729,7 @@ module Vector =
 
 
 /// vector with tail appended 
-  let append (tail:'T Vector) (vector:'T Vector) = 
+  let append  (vector:'T Vector) (tail:'T Vector) = 
     if size vector = 0
     then tail
     elif Tools.isFullTail vector.size 
@@ -756,7 +746,7 @@ module Vector =
 
 /// flattened vector
   let concat (vecOfvec: 'T Vector Vector) :  'T Vector = 
-    fold (fun a v -> append v a) Vector.EMPTY vecOfvec
+    fold (fun a v -> append a v) Vector.EMPTY vecOfvec
 
 /// The monadic map-cat:er
   let bind (f:'T -> 'V Vector)  (v : 'T Vector) : 'V Vector = 

@@ -6,34 +6,15 @@ module SV = col.Vector.SubVector
 
   
      
-let smallData () =
-    let emptyInt = intVector.EMPTY
-    let a = 
-      intVector.EMPTY 
-      |> V.add 11 
-      |> V.add 22
-    let b = 
-      intVector.EMPTY
-      |> V.add 11 
-      |> V.add 22
-    let c = 
-      intVector.EMPTY
-      |> V.add 11 
-      |> V.add 33
-    let sa = V.sub 0 2 a
-             |> Option.get 
-    let ra = V.rev a
-    struct {|a= a; b= b; c= c; sa = sa; ra = ra|}
 
 let tryList () =
-    let (a,b,c) = let data = smallData () 
-                  (data.a, data.b, data.c)
+    let a = V.ofList [11;22]
     if  (V.toList a) = [11;22] |> not then failwith "Not added"
 
 let tryEquals () =
-    let (a,b,c) = let data = smallData () 
-                  (data.a, data.b, data.c)
-    
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (a = b)
     then failwith "not equal"
     if a = c 
@@ -46,31 +27,38 @@ let tryHash () =
     then failwith "hash"
 
 let tryFirst () =
-    let a= (smallData ()).a 
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (Some 11 = (V.first a)) then failwith "not first"
    
 let trysize () =
-    let a= (smallData ()).a 
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (V.size a = 2) then failwith "not good size"
     if not (V.size (V.empty ()) = 0) then failwith "not good size"
 
 let tryget () =
-    let a= (smallData ()).a 
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (Some 22 = (V.get 1 a)) then failwith "Not second" 
     if not  (Some 11 = (V.get 0 a)) then failwith "Not First"
     if not (None = (V.get -1 a)) then failwith "No outofbounds"
     if not (None = (V.get 2 a)) then failwith "No outof upper bounds"
     
 let tryAddAllAndAppend ()=
-    let (a,b,c) = let data = smallData () 
-                  (data.a, data.b, data.c)
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     let ac = 
          intVector.EMPTY
          |> V.add 11 
          |> V.add 22
          |> V.add 11 
          |> V.add 33
-    if not (ac = V.append c a) 
+    if not (ac = V.append a c) 
     then failwith "not appended"
     if not (ac = V.addAll [11;33] a)
     then failwith "not addAlled"
@@ -81,15 +69,18 @@ let tryAddAllAndAppend ()=
     
 
 let tryOfList () =
-    let a= (smallData ()).a 
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (a = V.ofList [11;22])
     then failwith "not ofList"
     if not ((V.empty ()) = V.ofList [])
     then failwith "no empty list"
 
 let trySet () =
-    let (a,b,c) = let data = smallData () 
-                  (data.a, data.b, data.c)
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (Some c = V.set 1 33 a)
     then failwith "Could not set"
     let x = V.add 1 (V.empty ())
@@ -103,37 +94,105 @@ let trySet () =
     
 
 let tryDrop () =
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (Some (V.empty () |> V.add 11) = V.drop 1 a)
     then failwith "no drop"
     if not (Some (V.empty () ) = V.drop 2 a)
     then failwith "no drop all"
     if not (None = V.drop 3 a)
     then failwith "no drop too much"
+    
+    let n = 33
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let res = List.fold (fun a v -> (V.pop  a).Value) big [2..n] 
+    if V.isEmpty (res) 
+    then failwith "Is empty" 
+    if not (V.isEmpty (V.pop res).Value) 
+    then failwith "Not empty"
+ 
+    let n = 34
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let res = List.fold (fun a v -> (V.pop  a).Value) big [2..n] 
+    if V.isEmpty (res) 
+    then failwith "Is empty" 
+    if not (V.isEmpty (V.pop res).Value) 
+    then failwith "Not empty"
 
+
+    let n = 32*32+ 32//+32+1
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let res = List.fold (fun a v -> (V.pop  a).Value) big [2..n] 
+    if V.isEmpty (res) 
+    then failwith "Is empty" 
+    if not (V.isEmpty (V.pop res).Value) 
+    then failwith "Not empty" 
+
+    let n = 32*32+ 32+1//+32+1
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let res = List.fold (fun a v -> (V.pop  a).Value) big [2..n] 
+    if V.isEmpty (res) 
+    then failwith "Is empty" 
+    if not (V.isEmpty (V.pop res).Value) 
+    then failwith "Not empty" 
+    
+    let n = 32*32*32+32+1
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let res = List.fold (fun a v -> (V.pop  a).Value) big [2..n]
+    if V.isEmpty (res) 
+    then failwith "Is empty" 
+    if not (V.isEmpty (V.pop res).Value) 
+    then failwith "Not empty"
+
+    let n = 10000
+    let big = List.fold (fun a v -> V.add v a) (V.empty ()) [1..n]
+    let half = (V.drop 5000 big).Value;
+    V.fold (fun a v -> if not (a = v) 
+                          then failwith "not equal" 
+                          else a + 1) 
+           1 
+           half
+    |> ignore<int>
+    let less = (V.drop 4980 half).Value
+    V.fold (fun a v -> if not (a = v) 
+                          then failwith "not equal" 
+                          else a + 1) 
+           1 
+           less
+    |> ignore<int>
+    if not (20 = (V.size less))
+    then failwith "not 20"
+    
 let tryLast ()=
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (Some 22 = V.last a)
     then failwith "Not last"
     if not (None = V.last (V.empty ()))
     then failwith "Not last empty"
 
 let tryFold ()=
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not (33 = V.fold (+) 0 a)
     then failwith "not folding sum"
     if not (0 = V.fold (+) 0 (V.empty ()))
     then failwith "not folding empty"
 
 let tryFilter ()=
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
+    let b = V.ofList [11;22]
+    let c = V.ofList [11;33]
     if not ( (V.ofList [11]) = (V.filter (fun x -> x % 2 = 1) a))
     then failwith "not filtered"
     if not (V.empty() = V.filter  (fun x -> x % 2 = 1) (V.empty ()))
     then failwith "not nothing filter"
 
 let tryCut ()=
-  let a= (smallData ()).a
+  let a = V.ofList [11;22]
   if not ((V.cut 1 a |> function Some v -> SV.toList v
                                | None -> failwith "was none") = [11])
   then failwith "no cut"
@@ -151,7 +210,7 @@ let tryCut ()=
 
 
 let tryOfSub ()=
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
     if not ((=) (V.empty ()
                  |> V.add 22
                  |> V.add 11)
@@ -173,16 +232,17 @@ let tryOfSub ()=
     then failwith "no upper bounds on sub"
     
 let subList () =
-    let (a,sa) = let data = smallData () 
-                 (data.a, data.sa)
-    if not (SV.toList sa = V.toList a)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    if not ((SV.toList sa) = (V.toList a))
     then failwith "lists are not equal"
     if not ([] = (V.empty () |> V.rev |> SV.toList))
     then failwith "no empty sublist"
     
 let trySubGet () = 
-    let (a,sa,ra) = let data = smallData () 
-                    (data.a, data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not (SV.get 0 sa = V.get 0 a)
     then failwith "first is not equal"
     if not (SV.get 2 sa = V.get 2 a)
@@ -203,8 +263,9 @@ let trySubGet () =
     then failwith "not the first"
 
 let tryFirstRev ()=
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not (sa = SV.rev ra)
     then failwith "no rev rev"
     if not (Some 22 = SV.first ra)
@@ -215,8 +276,9 @@ let tryFirstRev ()=
     then failwith "last first"
 
 let trySubDrops ()=
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not (Some 22 =(SV.drop 1 ra 
                       |> function Some v -> SV.last v 
                                 | None -> failwith "none"))
@@ -226,8 +288,9 @@ let trySubDrops ()=
                                    | None -> failwith "none"))
      then failwith "no forward drops"
 let trySubCuts () =
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     let h1 = intVector.EMPTY  |> V.add 11 |> V.sub 0 1 
     let h2 = SV.cut 1 ra
     if not ( h1 = h2 )
@@ -236,8 +299,9 @@ let trySubCuts () =
     if not (V.empty () |> V.add 22 |> V.sub 0 1 = SV.cut 1 sa )
     then failwith "no cuts"
 let trySubSubs () =
-    let (sa,a) = let data = smallData () 
-                 (data.sa, data.a)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not ((V.sub 1 1 a) = (SV.sub 1 1 sa))
     then failwith "no subsub"
     let x = V.ofList [3;2;1] |> V.sub 0 3
@@ -247,8 +311,9 @@ let trySubSubs () =
     then failwith "no reverse sub"
 
 let trySubFolds () =
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not ([22;11] = SV.fold (fun a x -> x::a) [] sa)
     then failwith "not folding sum"
     
@@ -262,14 +327,16 @@ let trySubFolds () =
     then failwith "not folding sum"
 
 let tryRevReving () =
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not (sa = SV.rev ra)
     then failwith "not reving the rev"
 
 let trySubListing ()=
-    let (sa,ra) = let data = smallData () 
-                  (data.sa, data.ra)
+    let a = V.ofList [11;22]
+    let sa = (V.sub 0 2 a).Value
+    let ra = V.rev a
     if not ([11;22] = SV.toList sa)
     then failwith "not listing sub"
 
@@ -340,15 +407,19 @@ let performance n =
                                                   (Some a).Value ) 
                                             al 
                                             [0..n])
-      
+      let no = duration (sprintf "Removing %i" n )
+                         (fun x -> List.fold (fun a x -> 
+                                                       (V.pop a).Value) 
+                                             r 
+                                             [0..n])
       List.iter (fun x -> if not (Some (x+1) = V.get x r) then failwith "unexpected when modifying bigger") [0..n]
 
       let n32 = List.fold (fun a v -> V.add v a) (V.empty ()) [1..32]
       let n15 = List.fold (fun a v -> V.add v a) (V.empty ()) [1..15]
       let appended = duration (sprintf "append to 32 %i" n)  
-                              (fun _ -> V.append r n32)
+                              (fun _ -> V.append n32 r)
       let appended = duration (sprintf "append to 15 %i" n)  
-                              (fun _ -> V.append r n15)
+                              (fun _ -> V.append n15 r)
 
       let l32 = List.fold (fun (a:System.Collections.Generic.List<int>) v -> 
                                       a.Add v
@@ -371,7 +442,7 @@ let printData () =
                        |> printfn "%s:%i" k) 
                        data
 let tryFoldUntil () =
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
     if not ((33, None) = ( V.foldUntil (fun a v -> (a+v, None)) 0 a))
     then failwith "not fold until all the way"
     if not ((11, Some "Hi") = ( V.foldUntil (fun a v -> (a+v, Some "Hi")) 0 a))
@@ -382,7 +453,7 @@ let tryFoldUntil () =
     then failwith "not fold until all backwards"
 
 let tryFoldWhile () =
-    let a= (smallData ()).a
+    let a = V.ofList [11;22]
     if not (33 = ( V.foldWhile (fun a v -> (a+v, true)) 0 a))
     then failwith "not fold until all the way"
     if not (11 = ( V.foldWhile (fun a v -> (a+v, false)) 0 a))
@@ -426,10 +497,6 @@ let loo () =
     tryFoldWhile ()
     printData ()
     printfn "The skinny goat says all is nice and shiny"
- //   printfn "%A" (V.leafpaths 250)
-   // let x = List.fold (fun a v -> V.add v a) (V.empty ()) [0..120] 
-  //  printfn "%A" (V.sequence x |> Seq.toList)
-   // printfn "%A" (V.arrays x |> Seq.toList)
 
     
 
