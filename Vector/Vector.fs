@@ -28,29 +28,48 @@ module private Tools =
         else struct (false, 0)
     
     let inline levels size =
-         let size = size - 1
-         if size < (BucketSize*BucketBits)
-         then 1
-         else let mutable size = (size - BucketSize) >>>> BucketBits
-              let mutable levels = 0
-              while size <> 0 do
-                levels <- levels + 1
-                size <- size >>>> BucketBits
-              levels
-    
+      if size <= 1056 then 1
+      elif size <= 32800 then 2
+      elif size <= 1048608 then 3
+      elif size <= 33554464 then 4
+      elif size <= 1073741856 then 5
+      else 6
+
+   
     let inline indexOfArrayAt offset = offset &&& (BucketSize - 1)
     
     let inline shift levels = levels * BucketBits 
     
     let inline indexAtLevel index level = indexOfArrayAt <| (index >>>> (shift level))
-    //Make tables of these
-    let inline range (from:int) (step:int) (until:int) : int list = [for i in from..step..until -> i]
-    
+
     let inline pathToValue size index =
-         List.map (indexAtLevel index) <| range (levels size) -1 0
+       if size <= 1056
+       then [1;0]
+       elif size <= 32800
+       then [2;1;0]
+       elif size <= 1048608
+       then [3;2;1;0]
+       elif size <= 33554464
+       then [4;3;2;1;0]
+       elif size <= 1073741856
+       then [5;4;3;2;1;0]
+       else [6;5;4;3;2;1;0]
+       |> List.map (indexAtLevel index) 
     
     let inline pathToNode size index =
-         List.map (indexAtLevel index) <| range (levels size) -1 1
+       if size <= 1056
+       then [1]
+       elif size <= 32800
+       then [2;1]
+       elif size <= 1048608
+       then [3;2;1]
+       elif size <= 33554464
+       then [4;3;2;1]
+       elif size <= 1073741856
+       then [5;4;3;2;1]
+       else [6;5;4;3;2;1]
+       |> List.map (indexAtLevel index) 
+        
 
 
     let inline leafPaths size =
@@ -84,6 +103,7 @@ module private Tools =
                                  then traverse ((0, Array.get ar i) :: ((i + 1, node) :: xs))
                                  else traverse xs
          Seq.unfold traverse [(0,root)]
+
     let isInTail index size =
          index >= (tailStartOffset size)
     
@@ -758,4 +778,5 @@ module Vector =
 
  
 
-         
+
+ 
