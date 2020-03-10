@@ -146,13 +146,6 @@ module private Tools =
         | false, _ -> let path = pathToValue size index
                       valueIn path root
     
-    
-    let inline tailSize size = size - (tailStartOffset size)
-    
-    let inline isFullTail size = tailSize size >= BucketSize
-    
-    let inline roomInTail size = BucketSize - (tailSize size)
-    
     let inline isFullRoot size levels = 
       (size >>>> BucketBits) > (1 <<< (shift levels))
     
@@ -286,7 +279,7 @@ module Vector =
       let tailNode = leafOfArray lastTail 
       branch [|currentRoot; newPath levels tailNode|] 
 
-    let withPushedIntoDeeperTree (vec:'T Vector) v = 
+    let intoDeeperTree (vec:'T Vector) v = 
       let currentRoot = vec.root
       let newRoot = newLevelRoot currentRoot
                                  <| Tools.levels vec.size
@@ -294,10 +287,12 @@ module Vector =
       vec.withRootTailSize newRoot (Array.singleton v) (vec.size + 1)
 
 
-      
+    let roomInTail (vector:'T Vector) =
+      Tools.BucketSize - (Array.length vector.tail)
+
     let atIndex  = Array.tryItem
 
-    let cloneNodeWithValue node value index =
+    let cloneWithValue node value index =
       match node with
       | Branch ar -> 
          let len = Array.length ar
@@ -315,19 +310,19 @@ module Vector =
       match path with
       | [index] -> 
           match mother with
-          | Branch _ -> cloneNodeWithValue mother newNode index
+          | Branch _ -> cloneWithValue mother newNode index
           | EmptyNode _ -> branch (Array.singleton newNode)
           | Leaf _ -> failwith "Can not modify Leaf nodes"
       | (index::remaining) -> 
           match mother with
           | Branch ar -> 
               match atIndex index ar with
-              | Some child -> cloneNodeWithValue mother (withNodeIn remaining child newNode) index
-              | None -> cloneNodeWithValue mother (newPath ((List.length path) - 1) newNode ) index                     
+              | Some child -> cloneWithValue mother (withNodeIn remaining child newNode) index
+              | None -> cloneWithValue mother (newPath ((List.length path) - 1) newNode ) index                     
           | _ -> failwith "Can only modify branch nodes"
       | [] -> failwith "path is empty"
 
-    let withPushedIntoEquallySizedTree (vector:'T Vector) v= 
+    let intoEquallySizedTree (vector:'T Vector) v= 
       let size = vector.size 
       let last = vector.size - 1
       let path = Tools.pathToNode size last 
@@ -338,20 +333,23 @@ module Vector =
 
    
 
-    let withPushedIntoTree (vector:'T Vector) v =
+    let intoTree (vector:'T Vector) v =
         let size = vector.size
         let levels = Tools.levels size
         if Tools.isFullRoot size levels
-        then withPushedIntoDeeperTree vector v
-        else withPushedIntoEquallySizedTree vector v
+        then intoDeeperTree vector v
+        else intoEquallySizedTree vector v
     
-    let withPushedIntoTail (vector:'T Vector) element = 
+    let intoTail (vector:'T Vector) element = 
       vector.withTailSize (Array.append vector.tail [|element|]) (vector.size + 1)
 
+    let isFullTail (vector:'T Vector)  =
+      Tools.BucketSize = (Array.length vector.tail)
+
     let add element (vector : 'a Vector) =
-      if Tools.isFullTail vector.size
-      then withPushedIntoTree vector element
-      else withPushedIntoTail vector element
+      if isFullTail vector
+      then intoTree vector element
+      else intoTail vector element
 
 
   module private AddMany =
@@ -377,13 +375,12 @@ module Vector =
         then withPushedNodeIntoDeeperTree vector newTail
         else withPushedNodeIntoEquallySizedTree vector newTail
 
-    let addBucket array (vector: 'T Vector) =
-      
+    let addBucket array (vector: 'T Vector) =   
        if  (Array.length array > Tools.BucketSize)
        then failwith "trying to add more than a bucket"
        elif vector.size = 0
        then vector.withTailSize array (Array.length array)
-       elif not (Tools.isFullTail vector.size)
+       elif not (Add.isFullTail vector)
              then failwith "not full tail"
        else
          withPushedNodeIntoTree vector array
@@ -401,7 +398,7 @@ module Vector =
     let  transferSubBlocks (src:'T Vector) (dest:'T Vector) = 
    
        //What a mess. Clean up
-        let available = Tools.roomInTail dest.size
+        let available = Add.roomInTail dest
         let arrays = Tools.arrays src.root 
         if Seq.isEmpty arrays
         then Array.fold (fun a v -> Add.add v a) dest src.tail
@@ -444,8 +441,13 @@ module Vector =
              let solution, finalCut = Seq.fold folding (withFullTail,remaining) tailArrays
              
              Array.fold (fun a v -> Add.add v a) solution (Array.append finalCut src.tail)
-   
 
+    let append vector tail = 
+       if Add.isFullTail vector
+       then transferBlocks tail vector
+       elif tail.size >= Add.roomInTail vector 
+       then transferSubBlocks tail vector
+       else appendToTail tail vector
 
   module private Modify =
     let inline isAtEnd i (vec:'T Vector) = vec.size = i
@@ -684,7 +686,7 @@ module Vector =
     if n < 0 then None
     elif n > vector.size then None
     else 
-      let tsize = Tools.tailSize vector.size
+      let tsize = Array.length vector.tail
       if n < tsize
       then let newTail = let ar = Array.zeroCreate (tsize - n)
                          Array.blit vector.tail 0 ar 0 n
@@ -752,11 +754,8 @@ module Vector =
   let append  (vector:'T Vector) (tail:'T Vector) = 
     if size vector = 0
     then tail
-    elif Tools.isFullTail vector.size 
-    then AddMany.transferBlocks tail vector
-    elif tail.size >= Tools.roomInTail vector.size 
-    then AddMany.transferSubBlocks tail vector
-    else AddMany.appendToTail tail vector
+    else AddMany.append vector tail
+    
     
 /// A real vector of all elements found in a subvector
   let ofSub (sub:'T SubVector) =
