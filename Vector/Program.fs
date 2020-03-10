@@ -194,7 +194,7 @@ let tryFilter ()=
 let tryCut ()=
   let a = V.ofList [11;22]
   if not ((V.cut 1 a |> function Some v -> SV.toList v
-                               | None -> failwith "was none") = [11])
+                               | None -> failwith "was none") = [22])
   then failwith "no cut"
   if not (None = (V.cut 1 (V.empty ()))) 
   then failwith "emptyCut"
@@ -462,6 +462,8 @@ let tryFoldWhile () =
     then failwith "not fold until once rev"
     if not (33 = ( SV.foldWhile (fun a v -> (a+v, true)) 0 (V.rev a)))
     then failwith "not fold until all rev"
+    if not ( 2 = SV.size (V.toSub a))
+    then failwith "not full sub"
 
 
 let loo () =

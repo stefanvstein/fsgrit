@@ -478,6 +478,11 @@ module Vector =
       elif Tools.isOutOfBounds vec.size i then None
       else modify i v vec |> Some
 
+    let setOrFail i v vec =
+        if isAtEnd i vec then Add.add v vec 
+        elif Tools.isOutOfBounds vec.size i then failwith "Out of bounds"
+        else modify i v vec 
+
   module private Delete =
 
     let rec arrayOfLastLeaf node =
@@ -525,15 +530,29 @@ module Vector =
       elif vec.size = 1 then Vector.EMPTY |> Some
       else without vec |> Some
 
+    let popOrFail (vec:'T Vector) =
+       if vec.size = 0 then failwith "is empty"
+       elif vec.size = 1 then Vector.EMPTY 
+       else without vec 
+
 /// The empty vector  
   let empty () = Vector<_>.EMPTY
 
 /// element at index
   let get(index:int) (vector:'T Vector) : 'T option = 
     Get.get index vector
+
+  let getOrFail(index:int) (vector:'T Vector) : 'T = 
+    Get.getOrFail index vector
+  
     
 /// first element, as in the first added, position 0
   let first (vector:'T Vector) = get 0 vector
+
+  let firstOrFail vector = Get.getOrFail 0 vector
+
+  
+
 /// number of elements in the vector 
   let size (vector:_ Vector) = vector.size
   
@@ -556,6 +575,8 @@ module Vector =
 
 /// last element in the vector, most recently appended
   let last vector : 'T option = get ((size vector) - 1) vector 
+
+  let lastOrFail vector : 'T = Get.getOrFail ((size vector) - 1) vector 
 
 /// As subvector is a portion of a vector, possibly in reverse order. This is a view
   module SubVector =
@@ -677,8 +698,12 @@ module Vector =
 
   
 /// vector with with a element set at index. Index at tail means added element
-  let set index element vector : 'T Vector option= 
-   Modify.set index element vector
+  let set index element vector : 'T Vector option = 
+     Modify.set index element vector
+
+  let setOrFail index element vector : 'T Vector =
+    Modify.setOrFail index element vector
+   
   
 /// vector without n last elements 
   let drop n (vector:'T Vector): 'T Vector option = 
@@ -696,19 +721,52 @@ module Vector =
       else 
         List.fold (fun a x -> Delete.pop (a.Value)) (Some vector) [1..n]
 
+  /// vector without n last elements 
+  let dropOrFail n (vector:'T Vector): 'T Vector  = 
+    //plz optimize, at least by dropping tail-wise
+    if n < 0 then failwith "out of bounds"
+    elif n > vector.size then failwith "out of bounds"
+    else 
+      let tsize = Array.length vector.tail
+      if n < tsize
+      then let newTail = let ar = Array.zeroCreate (tsize - n)
+                         Array.blit vector.tail 0 ar 0 n
+                         ar
+           vector.withTailSize newTail (vector.size - 1)
+      else 
+        List.fold (fun a x -> Delete.popOrFail a)  vector [1..n]
+
 /// vector without the last element                                         
   let pop vector : 'T Vector option = Delete.pop vector   
+
+  let popOrFail vector : 'T Vector = Delete.popOrFail vector
+
 /// subvector respresented by n element from index  
   let sub index n (vector:'T Vector) : 'T SubVector option = 
-    if (index > vector.size) then None
+    if index > vector.size then None
     elif index < 0 then None
     elif n = 0 then Some <| SubVector.EMPTY
     elif n < 0 then None
     elif index + n > vector.size then None
     else Some ( SubVector (vector, index, n, true))
+
+  let subOrFail index n (vector:'T Vector) : 'T SubVector = 
+     if index > vector.size ||
+        index < 0 
+     then  failwith "out of bounds"
+     elif n = 0 then  SubVector.EMPTY
+     elif n < 0 ||
+          index + n > vector.size 
+     then failwith "out of bounds"
+     else SubVector (vector, index, n, true)
+
     
-/// subvector represented by all but n first elements 
-  let cut n vector : 'T SubVector option = sub 0 n vector
+/// but n first elements 
+  let cut n (vector : 'T Vector): 'T SubVector option = 
+       sub n (vector.size - n) vector
+
+  let cutOrFail n (vector : 'T Vector): 'T SubVector = 
+       subOrFail n (vector.size - n) vector
 
 /// subvector as reverse of vector
   let rev (vector: 'T Vector) : 'T SubVector = 
@@ -772,8 +830,10 @@ module Vector =
     //Better append each in a fold?
     map f v |> concat
 
+  let toSub (v:'T Vector) = SubVector (v, 0, v.size, true)
+
   let toSeq (v:'T Vector) = Seq.append (Tools.asSeq v.root |> Seq.toList)
-                                          (Array.toSeq v.tail)
+                                       (Array.toSeq v.tail)
 
  
 
