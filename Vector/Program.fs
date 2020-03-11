@@ -388,28 +388,29 @@ let performance n =
                                             [0..n])
 
       duration (sprintf "Get %i" n) 
-               (fun x -> List.iter (fun x -> if not (Some x = V.get x r) 
+               (fun x -> List.iter (fun x -> if not ( x = V.getOrFail x r) 
                                              then failwith "unexpected when indexing bigger") 
                                    [0..n])
       duration (sprintf "Get Generic List %i" n)
-               (fun x -> List.iter (fun (x:int) -> if not (Some x = Some (al.[x]) ) 
+               (fun x -> List.iter (fun (x:int) -> if not ( x = al.[x] ) 
                                                    then failwith "unexpected when indexing bigger") 
                                    [0..n])
       let r = duration (sprintf "Set %i" n) 
-                       (fun x -> List.fold (fun a x -> (let inc = 1 + (V.get x r).Value
-                                                       V.set x inc a).Value) 
+                       (fun x -> List.fold (fun a x -> (let inc = 1 + (V.getOrFail x r)
+                                                       V.setOrFail x inc a)) 
                                            r 
                                            [0..n])
+
       let al = duration ( sprintf "Set Generic list %i" n) 
                         (fun x -> List.fold (fun (a:System.Collections.Generic.List<int>) x -> 
-                                                  let inc = 1 + (Some (al.[x])).Value
+                                                  let inc = 1 + ( (al.[x]))
                                                   a.[x] <- inc
-                                                  (Some a).Value ) 
+                                                  a) 
                                             al 
                                             [0..n])
       let no = duration (sprintf "Removing %i" n )
                          (fun x -> List.fold (fun a x -> 
-                                                       (V.pop a).Value) 
+                                                  V.popOrFail a) 
                                              r 
                                              [0..n])
       List.iter (fun x -> if not (Some (x+1) = V.get x r) then failwith "unexpected when modifying bigger") [0..n]

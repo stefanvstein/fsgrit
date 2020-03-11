@@ -588,7 +588,7 @@ module Vector =
            then get (subvector.i + index) subvector.v 
            else get (subvector.i + subvector.n - 1 - index ) subvector.v
       else None
- /// first element, as in the first added, position 0  
+/// first element, as in the first added, position 0  
     let first v= get 0 v
 /// first element, ot abnormal failure if not present
     let firstOrFail (v:'T SubVector) = 
@@ -701,6 +701,7 @@ module Vector =
   let set index element vector : 'T Vector option = 
      Modify.set index element vector
 
+/// vector with with a element set at index. Index at tail means added element
   let setOrFail index element vector : 'T Vector =
     Modify.setOrFail index element vector
    
@@ -739,6 +740,7 @@ module Vector =
 /// vector without the last element                                         
   let pop vector : 'T Vector option = Delete.pop vector   
 
+/// vector without the last element    
   let popOrFail vector : 'T Vector = Delete.popOrFail vector
 
 /// subvector respresented by n element from index  
@@ -750,6 +752,7 @@ module Vector =
     elif index + n > vector.size then None
     else Some ( SubVector (vector, index, n, true))
 
+/// subvector respresented by n element from index  
   let subOrFail index n (vector:'T Vector) : 'T SubVector = 
      if index > vector.size ||
         index < 0 
@@ -765,6 +768,7 @@ module Vector =
   let cut n (vector : 'T Vector): 'T SubVector option = 
        sub n (vector.size - n) vector
 
+/// but n first elements 
   let cutOrFail n (vector : 'T Vector): 'T SubVector = 
        subOrFail n (vector.size - n) vector
 
@@ -780,8 +784,7 @@ module Vector =
 
 /// combine result of recursivly processing each element  
   let fold (f:'a -> 'T -> 'a) (a:'a) (xs:'T Vector) : 'a   =
-    Get.fold f a xs
-    
+    Get.fold f a xs   
         
 /// combine result of recursivly processing each element until some additional value is returned 
   let foldUntil f s v =
@@ -807,14 +810,12 @@ module Vector =
          Vector.EMPTY
          xs
 
-
 /// vector with tail appended 
   let append  (vector:'T Vector) (tail:'T Vector) = 
     if size vector = 0
     then tail
     else AddMany.append vector tail
-    
-    
+       
 /// A real vector of all elements found in a subvector
   let ofSub (sub:'T SubVector) =
     if sub.i = 0 && sub.n = sub.v.size && sub.forward
@@ -830,8 +831,10 @@ module Vector =
     //Better append each in a fold?
     map f v |> concat
 
+// A SubVector wrapping the whole vector 
   let toSub (v:'T Vector) = SubVector (v, 0, v.size, true)
 
+// A seq of the vector
   let toSeq (v:'T Vector) = Seq.append (Tools.asSeq v.root |> Seq.toList)
                                        (Array.toSeq v.tail)
 
