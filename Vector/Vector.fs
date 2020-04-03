@@ -1,4 +1,4 @@
-﻿module col
+﻿module fsgrit
 
 type internal Node<'T> = | Leaf of 'T array
                          | Branch of Node<'T> array
@@ -155,7 +155,6 @@ module private Tools =
 type Vector<'T when 'T : equality>  private (size:int, root : 'T Node, tail : 'T array, hash :int) = 
   let mutable hash = hash
   static let EMPTY_VECTOR =  Vector<'T>(0, EmptyNode, Array.empty, 0)
-  //new (size:int, root : 'T Node, tail : 'T array ) = Vector (size, root, tail, -1)
   member internal x.size = size
   member internal x.root= root
   member internal x.tail = tail
@@ -190,17 +189,16 @@ type Vector<'T when 'T : equality>  private (size:int, root : 'T Node, tail : 'T
        else hash    
 
 module private Get =
-    open Tools
     let get (index:int) (vector:'T Vector) : 'T option =
       if Tools.isOutOfBounds vector.size index
       then None
-      else match inTailIndex vector.size index with
+      else match Tools.inTailIndex vector.size index with
             | true, v -> Array.get vector.tail v  |> Some
-            | false, _ -> let path = pathToValue vector.size index
-                          valueIn path vector.root  |> Some
+            | false, _ -> let path = Tools.pathToValue vector.size index
+                          Tools.valueIn path vector.root  |> Some
         
     let getOrFail (index:int) (vector:'T Vector) =
-      getInNode index vector.size vector.tail vector.root  
+      Tools.getInNode index vector.size vector.tail vector.root  
 
     let fold f a (xs: 'T Vector)=
       let all = Seq.append (Tools.arrays xs.root) (Seq.singleton xs.tail)
@@ -263,6 +261,129 @@ type SubVector<'T when 'T : equality> private (v:Vector<'T>, i :int , n:int ,for
 /// A persistent immutable random access list that grows in the tail
 /// Mutation is represented by logically new lists, that share data with previos, and maintain the same algoritmic complexity
 /// Access is typically O log32 n
+
+module SubVector =
+
+/// element at index   
+    let get index (subvector:'T SubVector) : 'T option = 
+      if index < subvector.n && index >= 0
+      then if subvector.forward 
+           then  Get.get  (subvector.i + index) subvector.v 
+           else let revSubi = subvector.i + subvector.n - 1 - index 
+                Get.get revSubi subvector.v
+      else None
+/// first element, as in the first added, position 0  
+    let first v= 
+      get 0 v
+/// first element, ot abnormal failure if not present
+    let firstOrFail (v:'T SubVector) = 
+       if 0 < v.n 
+       then if v.forward
+            then Get.getOrFail v.i v.v
+            else Get.getOrFail (v.i + v.n - 1) v.v 
+       else failwith "vector is empty" 
+///number of elements the subvector respresents    
+    let size (subvector:'T SubVector) : int = subvector.n
+    
+    let isEmpty v = 
+      size v = 0
+/// last element in the vector, most recently appended    
+    let last (subvector: 'T SubVector) : 'T option = 
+      get (size subvector - 1 ) subvector
+
+/// subvector without the n last elements
+    let drop n (subvector:'T SubVector) : 'T SubVector option = 
+      if subvector.n > n
+      then if subvector.forward 
+           then subvector.withLength (subvector.n-n) 
+                |> Some       
+           else subvector.withIndexLenght (subvector.i + n)
+                                          (subvector.n - n)
+                |> Some                            
+      else None
+
+ /// subvector without last element   
+    let pop vector = drop 1 vector 
+
+ /// subvector without the first n elements   
+    let cut n (subvector:'T SubVector) : 'T SubVector option = 
+      match struct (subvector.n, n, subvector.forward) with
+      | _,0,_ -> Some subvector
+      | 0,_,_ -> None
+      | sn,n,_ when n > sn -> None
+      | sn,n,_ when n = sn -> Some SubVector<'T>.EMPTY
+      | _, n, true -> subvector.withIndexLenght (subvector.i + n)
+                                                (subvector.n - n)
+                      |> Some
+      | _, n, false -> subvector.withLength (subvector.n - n)
+                       |> Some
+ /// A more narrow portion of the subset. n elements from i, counting from current
+    let sub i n (subvector:'T SubVector) : 'T SubVector option =
+      if i<0 || n<0 then None
+      elif i + n > subvector.n then None
+      elif n = 0 then Some SubVector.EMPTY
+      elif subvector.n = 0 then None
+      elif subvector.forward then Some (subvector.withIndexLenght (subvector.i + i) n)
+      else Some (subvector.withIndexLenght  (subvector.n - i - n) (subvector.n - i))
+ 
+ /// all except first, possibly empty, or abnormal failure
+    let restOrFail (v:'T SubVector) =
+      if v.n = 0
+      then failwith "empty subvector"
+      elif v.n = 1 
+      then SubVector.EMPTY
+      elif v.forward
+      then v.withIndexLenght (v.i + 1) (v.n - 1)
+      else v.withLength (v.n - 1)
+ 
+ /// combine result of recursivly processing each element
+    let fold f a (subvector: 'T SubVector) =
+      let f' = OptimizedClosures.FSharpFunc<_,_,_>.Adapt f
+      //Plz, optimize by running on each Leaf
+      let mutable acc = a 
+      let v = subvector.v
+      if subvector.forward
+      then let ending = subvector.i + subvector.n - 1
+           for i = subvector.i to ending do
+              acc <- f'.Invoke (acc, Get.getOrFail i v)
+      else for i = subvector.i+subvector.n-1 downto subvector.i do
+              acc <- f'.Invoke (acc, Get.getOrFail i v)
+      acc 
+/// reverse view of subvector
+    let rev (subvector:'T SubVector) : 'T SubVector = 
+       subvector.withForward (not subvector.forward)
+                   
+/// fold from the back
+    let foldBack f subvector a=
+      fold (fun a x -> f x a) a (rev subvector)
+
+ /// A list containing all elements in the same order
+    let toList  (subvector:'T SubVector) : 'T list = 
+      foldBack (fun x a -> x::a) subvector [] 
+
+ /// combine result of recursivly processing each element until some additional value is returned 
+    let foldUntil (f: 'a->'x -> struct ('a * 'm option)) (seed:'a) (vector:'x SubVector) : ('a * 'm option) =
+      let rec foldav' (f' :OptimizedClosures.FSharpFunc<_,_,_>) (a:'a) (l : 'x SubVector) : struct ('a * 'm option) =
+        if size l = 0 
+        then struct (a, None)
+        else match f'.Invoke (a, firstOrFail l) with
+             | struct (a', Some m) -> struct (a', Some m)
+             | struct (a', None) -> foldav' f' a' (restOrFail l)
+      match foldav' (OptimizedClosures.FSharpFunc<_,_,_>.Adapt f) seed vector with
+      | struct (a,m) -> a,m
+             
+/// combine result of recursivly processing each element while a condition is met
+    let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x SubVector) : 'a =
+      //let rec folda' (f' :  _ -> _ -> struct ('a * bool)) (a:'a) (xs: 'x SubVector) : 'a =
+      let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x SubVector) : 'a =
+         if size xs = 0
+         then a
+         //else match f' a (firstOrFail xs) with
+         else match f'.Invoke (a, firstOrFail xs) with
+                      | struct (a', false) -> a'
+                      | struct (a', true) -> folda' f' a' (restOrFail xs)
+      //folda'  f a xs
+      folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs
 module Vector =
   module internal Add =
     let leafOfArray array = Leaf array
@@ -313,7 +434,7 @@ module Vector =
           | Branch _ -> cloneWithValue mother newNode index
           | EmptyNode _ -> branch (Array.singleton newNode)
           | Leaf _ -> failwith "Can not modify Leaf nodes"
-      | (index::remaining) -> 
+      | (index :: remaining) -> 
           match mother with
           | Branch ar -> 
               match atIndex index ar with
@@ -422,17 +543,13 @@ module Vector =
                                                 (addBucket toAdd dest), remain
                                            elif Array.length x <= fillSize 
                                            then let newRemainSize = remainSize + Array.length x
-                                                 
                                                 let newRemain = Array.zeroCreate newRemainSize
-             
                                                 Array.blit remain 0 newRemain 0 remainSize
                                                 Array.blit x 0 newRemain remainSize (Array.length x)
                                                 dest, newRemain
-                                           else 
-                                                let toAdd = Array.zeroCreate Tools.BucketSize
+                                           else let toAdd = Array.zeroCreate Tools.BucketSize
                                                 Array.blit remain 0 toAdd 0 remainSize
                                                 Array.blit x 0 toAdd remainSize fillSize
-             
                                                 let newRemainSize = (Array.length x) - fillSize
                                                 let newRemain = Array.zeroCreate newRemainSize
                                                 Array.blit x fillSize newRemain 0 newRemainSize
@@ -454,12 +571,13 @@ module Vector =
     let rec nodeWith path node value = 
       match path with
       | [i'] -> match node with 
-                | Leaf ar -> Leaf (let a = Array.copy ar
-                                   Array.set a i' value
-                                   a)
+                | Leaf ar -> let a = Array.copy ar
+                             Array.set a i' value
+                             Leaf a
                 | _ -> failwith "Found something else than a leaf in the path tail"
       | (i' :: ix) -> match node with
-                      | Branch ar -> let n = nodeWith ix (Array.get ar i') value
+                      | Branch ar -> let node = Array.get ar i'
+                                     let n = nodeWith ix node value
                                      let a = Array.copy ar
                                      Array.set a i' n
                                      Branch a
@@ -468,11 +586,13 @@ module Vector =
     
     let modify i value (vector:'T Vector) =  
       match Tools.inTailIndex vector.size i with
-      | true, i' -> vector.withTail ( let a = Array.copy vector.tail
-                                      Array.set a i' value
-                                      a)
+      | true, i' -> let a = Array.copy vector.tail
+                    Array.set a i' value
+                    vector.withTail a
       | false,_ -> let path = Tools.pathToValue vector.size i
-                   vector.withRoot (nodeWith path vector.root value)
+                   let nRoot = nodeWith path vector.root value
+                   vector.withRoot nRoot
+
     let set i v vec =
       if isAtEnd i vec then Add.add v vec |> Some
       elif Tools.isOutOfBounds vec.size i then None
@@ -536,7 +656,8 @@ module Vector =
        else without vec 
 
 /// The empty vector  
-  let empty () = Vector<_>.EMPTY
+  let empty () = 
+    Vector<_>.EMPTY
 
 /// element at index
   let get(index:int) (vector:'T Vector) : 'T option = 
@@ -547,22 +668,27 @@ module Vector =
   
     
 /// first element, as in the first added, position 0
-  let first (vector:'T Vector) = get 0 vector
+  let first (vector:'T Vector) = 
+    Get.get 0 vector
 
-  let firstOrFail vector = Get.getOrFail 0 vector
+  let firstOrFail vector = 
+    Get.getOrFail 0 vector
 
-  
+
 
 /// number of elements in the vector 
-  let size (vector:_ Vector) = vector.size
+  let size (vector:_ Vector) = 
+    vector.size
   
-  let isEmpty v = size v = 0
+  let isEmpty v = 
+    size v = 0
 
 /// returns a vector with attitional element in the tail 
-  let add element vector = Add.add element vector
+  let add element vector = 
+     Add.add element vector
   
-  let singleton e = empty ()
-                    |> add e
+  let singleton e = 
+    empty () |> add e
 
  /// add all elements, int the same order
   let addAll (elements:'T list) vector : 'T Vector = 
@@ -574,127 +700,16 @@ module Vector =
     Vector<'T>.EMPTY  |> addAll elements 
 
 /// last element in the vector, most recently appended
-  let last vector : 'T option = get ((size vector) - 1) vector 
+  let last vector : 'T option = 
+    let lasti = (size vector) - 1
+    get lasti vector 
 
-  let lastOrFail vector : 'T = Get.getOrFail ((size vector) - 1) vector 
+  let lastOrFail vector : 'T =
+    let lasti = (size vector) - 1
+    Get.getOrFail lasti vector 
 
 /// As subvector is a portion of a vector, possibly in reverse order. This is a view
-  module SubVector =
-
-/// element at index   
-    let get index (subvector:'T SubVector) : 'T option = 
-      if index < subvector.n && index >= 0
-      then if subvector.forward 
-           then get (subvector.i + index) subvector.v 
-           else get (subvector.i + subvector.n - 1 - index ) subvector.v
-      else None
-/// first element, as in the first added, position 0  
-    let first v= get 0 v
-/// first element, ot abnormal failure if not present
-    let firstOrFail (v:'T SubVector) = 
-       if 0 < v.n 
-       then if v.forward
-            then Get.getOrFail v.i v.v
-            else Get.getOrFail (v.i + v.n - 1) v.v 
-       else failwith "vector is empty" 
-///number of elements the subvector respresents    
-    let size (subvector:'T SubVector) : int = subvector.n
-    
-    let isEmpty v = size v = 0
-/// last element in the vector, most recently appended    
-    let last (subvector: 'T SubVector) : 'T option = 
-      get (size subvector - 1 ) subvector
-
-/// subvector without the n last elements
-    let drop n (subvector:'T SubVector) : 'T SubVector option = 
-      if subvector.n > n
-      then if subvector.forward 
-           then subvector.withLength (subvector.n-n) 
-                |> Some       
-           else subvector.withIndexLenght (subvector.i + n)
-                                          (subvector.n - n)
-                |> Some                            
-      else None
-
- /// subvector without last element   
-    let pop vector = drop 1 vector 
-
- /// subvector without the first n elements   
-    let cut n (subvector:'T SubVector) : 'T SubVector option = 
-      match struct (subvector.n, n, subvector.forward) with
-      | _,0,_ -> Some subvector
-      | 0,_,_ -> None
-      | sn,n,_ when n > sn -> None
-      | sn,n,_ when n = sn -> Some SubVector<'T>.EMPTY
-      | _, n, true -> subvector.withIndexLenght (subvector.i + n)
-                                                (subvector.n - n)
-                      |> Some
-      | _, n, false -> subvector.withLength (subvector.n - n)
-                       |> Some
- /// A more narrow portion of the subset. n elements from i, counting from current
-    let sub i n (subvector:'T SubVector) : 'T SubVector option =
-      if i<0 || n<0 then None
-      elif i + n > subvector.n then None
-      elif n = 0 then Some SubVector.EMPTY
-      elif subvector.n = 0 then None
-      elif subvector.forward then Some (subvector.withIndexLenght (subvector.i + i) n)
-      else Some (subvector.withIndexLenght  (subvector.n - i - n) (subvector.n - i))
- 
- /// all except first, possibly empty, or abnormal failure
-    let nextOrFail (v:'T SubVector) =
-      if v.n = 0
-      then failwith "empty subvector"
-      elif v.n = 1 
-      then SubVector.EMPTY
-      elif v.forward
-      then v.withIndexLenght (v.i + 1) (v.n - 1)
-      else v.withLength (v.n - 1)
- 
- /// combine result of recursivly processing each element
-    let fold f a (subvector: 'T SubVector) =
-      let f' = OptimizedClosures.FSharpFunc<_,_,_>.Adapt f
-      //Plz, optimize by running on each Leaf
-      let mutable acc = a 
-      let v = subvector.v
-      if subvector.forward
-      then let ending = subvector.i + subvector.n - 1
-           for i = subvector.i to ending do
-              acc <- f'.Invoke (acc, Get.getOrFail i v)
-      else for i = subvector.i+subvector.n-1 downto subvector.i do
-              acc <- f'.Invoke (acc, Get.getOrFail i v)
-      acc 
-/// reverse view of subvector
-    let rev (subvector:'T SubVector) : 'T SubVector = 
-       subvector.withForward (not subvector.forward)
-                   
-/// fold from the back
-    let foldBack f subvector a=
-      fold (fun a x -> f x a) a (rev subvector)
-
- /// A list containing all elements in the same order
-    let toList  (subvector:'T SubVector) : 'T list = 
-      foldBack (fun x a -> x::a) subvector [] 
-
- /// combine result of recursivly processing each element until some additional value is returned 
-    let foldUntil (f: 'a->'x -> struct ('a * 'm option)) (seed:'a) (vector:'x SubVector) : ('a * 'm option) =
-      let rec foldav' (f' :OptimizedClosures.FSharpFunc<_,_,_>) (a:'a) (l : 'x SubVector) : struct ('a * 'm option) =
-        if size l = 0 
-        then struct (a, None)
-        else match f'.Invoke (a, firstOrFail l) with
-             | struct (a', Some m) -> struct (a', Some m)
-             | struct (a', None) -> foldav' f' a' (nextOrFail l)
-      match foldav' (OptimizedClosures.FSharpFunc<_,_,_>.Adapt f) seed vector with
-      | struct (a,m) -> a,m
-             
-/// combine result of recursivly processing each element while a condition is met
-    let foldWhile (f : 'a -> 'x -> struct ('a * bool)) (a:'a) (xs: 'x SubVector) : 'a =
-      let rec folda' (f' : OptimizedClosures.FSharpFunc<_,_,struct ('a * bool)>) (a:'a) (xs: 'x SubVector) : 'a =
-         if size xs = 0
-         then a
-         else match f'.Invoke (a, firstOrFail xs) with
-                      | struct (a', false) -> a'
-                      | struct (a', true) -> folda' f' a' (nextOrFail xs)
-      folda' (OptimizedClosures.FSharpFunc<_,_, struct ('a * bool)>.Adapt f) a xs
+  
 
   
 /// vector with with a element set at index. Index at tail means added element
@@ -742,7 +757,8 @@ module Vector =
 
 /// vector without the last element    
   let popOrFail vector : 'T Vector = Delete.popOrFail vector
-
+  
+  
 /// subvector respresented by n element from index  
   let sub index n (vector:'T Vector) : 'T SubVector option = 
     if index > vector.size then None
@@ -771,6 +787,13 @@ module Vector =
 /// but n first elements 
   let cutOrFail n (vector : 'T Vector): 'T SubVector = 
        subOrFail n (vector.size - n) vector
+
+/// All but first
+  let rest vector = 
+    cut 1 vector
+
+  let restOrFail vector = 
+    cutOrFail 1 vector
 
 /// subvector as reverse of vector
   let rev (vector: 'T Vector) : 'T SubVector = 

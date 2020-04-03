@@ -1,8 +1,8 @@
 ﻿// Learn more about F# at http://fsharp.org
 module Program
-module V = col.Vector
-type intVector = col.Vector<int>
-module SV = col.Vector.SubVector
+module V = fsgrit.Vector
+type V<'T when 'T : equality> = fsgrit.Vector<'T>
+module SV = fsgrit.SubVector
 
   
      
@@ -53,7 +53,7 @@ let tryAddAllAndAppend ()=
     let b = V.ofList [11;22]
     let c = V.ofList [11;33]
     let ac = 
-         intVector.EMPTY
+         V.EMPTY
          |> V.add 11 
          |> V.add 22
          |> V.add 11 
@@ -291,7 +291,7 @@ let trySubCuts () =
     let a = V.ofList [11;22]
     let sa = (V.sub 0 2 a).Value
     let ra = V.rev a
-    let h1 = intVector.EMPTY  |> V.add 11 |> V.sub 0 1 
+    let h1 = V.EMPTY  |> V.add 11 |> V.sub 0 1 
     let h2 = SV.cut 1 ra
     if not ( h1 = h2 )
     then failwith "not reverse cuts"
@@ -500,11 +500,90 @@ let loo () =
     tryFoldWhile ()
     printData ()
     printfn "The skinny goat says all is nice and shiny"
+module Vector = fsgrit.Vector
+module SubVector = fsgrit.SubVector
+type Vector<'A  when 'A : equality> = fsgrit.Vector<'A>
+type SubVector<'A when 'A : equality> = fsgrit.SubVector<'A>
 
+let tutorial () =
+  let fail x = fun () -> failwith x
+  let orFail s t = if t then () else failwith s 
+  let (v:int Vector) = Vector.EMPTY
+  let v = Vector.empty ()
+          |> Vector.add "a"
+          |> Vector.add "b"
+
+  let v = Vector.singleton "a"
+          |> Vector.add "b"
+  let v= Vector.ofList ["a";"b"]
+  let both = Vector.append v (Vector.ofList ["c";"d"])
+  printfn "%A" (Vector.toList both)
+  let both = Vector.addAll ["c"; "d"] v
+  printfn "%A" (Vector.toList both)
+  let all = Vector.concat (Vector.ofList [Vector.singleton "a"
+                                          Vector.singleton "b"
+                                          Vector.singleton "c"])
+  printfn "%A" (Vector.toList all)
+
+
+  let modified = Vector.setOrFail 1 "B" all
+  Vector.toList modified |> printfn "%A" 
+  let modified = match Vector.set 1 "B" all with
+                 | Some v -> v 
+                 | None -> failwith "Huh?"
+  printfn "%A->%A" (Vector.toList all) (Vector.toList modified)
+
+  let trans = Vector.ofList [1;2;3]
+              |> Vector.map (fun v -> v + 1) 
+  let trans = Vector.ofList [1;2;3]
+              |> Vector.filter (fun v -> v % 2 = 0)
+  let trans = Vector.ofList [1;2;3]
+              |> Vector.bind (fun x -> Vector.singleton (x + 1))
+  let sum = Vector.ofList [1;2;3]
+            |> Vector.fold (fun a x -> a + x) 0
+
+  let sum = Vector.foldWhile (fun a x -> (a + x, x < 2)) 0 (Vector.ofList [1;2;3])
+
+  let item = Vector.getOrFail 1 all
+  let item = Vector.get 1 all
+             |> Option.defaultWith (fail "Huh?")
+           
+  printfn "%s" item
+  
+  let item =  Vector.first all
+              |> Option.defaultWith (fail "Huh!")
+             
+                        
+  
+  let item = Vector.last all
+              |> Option.defaultWith (fail "Huh?")
+                        
+  let init = Vector.pop all
+             |> Option.defaultWith (fail "Huh?")
+                     
+  let init = Vector.drop 1 all
+             |> Option.defaultWith (fail "Huh?")
+  let (tail:_ SubVector) = Vector.rest all
+                          |> Option.defaultWith (fail "Huh?")
+   
+  (((SubVector.toList tail) = ["b";"c"] ) || failwith "Huh!" )
+  |> ignore
+
+  let sub = Vector.sub 1 2 all
+            |> Option.defaultWith (fail "Huh?")
+  let rev = SubVector.rev sub
+  (["c";"b"] = (SubVector.toList rev))
+  |> orFail "Huh?"
     
+
+  ()
+             
+
+
 
 [<EntryPoint>]
 let main argv = 
   for i in 0..0 do
     loo ()
+  tutorial ()
   0
