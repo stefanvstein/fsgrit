@@ -53,7 +53,7 @@ let tryAddAllAndAppend ()=
     let b = V.ofList [11;22]
     let c = V.ofList [11;33]
     let ac = 
-         V.EMPTY
+         V.Empty
          |> V.add 11 
          |> V.add 22
          |> V.add 11 
@@ -76,6 +76,15 @@ let tryOfList () =
     then failwith "not ofList"
     if not ((V.empty ()) = V.ofList [])
     then failwith "no empty list"
+
+let tryOfArray () =
+    let a = V.ofArray [|11;22|]
+    let b = V.ofArray [|11;22|]
+    let c = V.ofArray [|11;33|]
+    if not (a = V.ofArray [|11;22|])
+    then failwith "not ofArray"
+    if not ((V.empty ()) = V.ofArray [||])
+    then failwith "no empty array"
 
 let trySet () =
     let a = V.ofList [11;22]
@@ -291,7 +300,7 @@ let trySubCuts () =
     let a = V.ofList [11;22]
     let sa = (V.sub 0 2 a).Value
     let ra = V.rev a
-    let h1 = V.EMPTY  |> V.add 11 |> V.sub 0 1 
+    let h1 = V.Empty  |> V.add 11 |> V.sub 0 1 
     let h2 = SV.cut 1 ra
     if not ( h1 = h2 )
     then failwith "not reverse cuts"
@@ -442,30 +451,108 @@ let printData () =
                        |> List.item (((List.length v)/2)) 
                        |> printfn "%s:%i" k) 
                        data
-let tryFoldUntil () =
+let tryFoldTo () =
     let a = V.ofList [11;22]
-    if not ((33, None) = ( V.foldUntil (fun a v -> (a+v, None)) 0 a))
+    if not ((33, None) = ( V.foldTo (fun a v -> (a+v, None)) 0 a))
     then failwith "not fold until all the way"
-    if not ((11, Some "Hi") = ( V.foldUntil (fun a v -> (a+v, Some "Hi")) 0 a))
+    if not ((11, Some "Hi") = ( V.foldTo (fun a v -> (a+v, Some "Hi")) 0 a))
     then failwith "not fold until once"
-    if not ((22, Some "Hi") = ( SV.foldUntil (fun a v -> (a+v, Some "Hi")) 0 (V.rev a)))
+    if not ((22, Some "Hi") = ( SV.foldTo (fun a v -> (a+v, Some "Hi")) 0 (V.rev a)))
     then failwith "not fold until once backwards"
-    if not ((33, None) = ( SV.foldUntil (fun a v -> (a+v, None)) 0 (V.rev a)))
+    if not ((33, None) = ( SV.foldTo (fun a v -> (a+v, None)) 0 (V.rev a)))
     then failwith "not fold until all backwards"
+
 
 let tryFoldWhile () =
     let a = V.ofList [11;22]
-    if not (33 = ( V.foldWhile (fun a v -> (a+v, true)) 0 a))
+    if not (33 = ( V.foldUntil (fun a v -> (a+v, false)) 0 a))
     then failwith "not fold until all the way"
-    if not (11 = ( V.foldWhile (fun a v -> (a+v, false)) 0 a))
+    if not (11 = ( V.foldUntil (fun a v -> (a+v, true)) 0 a))
     then failwith "not fold until once"
-    if not (22 = ( SV.foldWhile (fun a v -> (a+v, false)) 0 (V.rev a)))
+    if not (22 = ( SV.foldUntil (fun a v -> (a+v, true)) 0 (V.rev a)))
     then failwith "not fold until once rev"
-    if not (33 = ( SV.foldWhile (fun a v -> (a+v, true)) 0 (V.rev a)))
+    if not (33 = ( SV.foldUntil (fun a v -> (a+v, false)) 0 (V.rev a)))
     then failwith "not fold until all rev"
     if not ( 2 = SV.size (V.toSub a))
     then failwith "not full sub"
 
+let tryContainFunction () =
+    let listOfFns = [(fun x -> x); (fun x -> x * x)]
+    V.ofList listOfFns
+    |> ignore<_>
+    ()
+
+let tryUnfold () =
+    let a = V.unfold (fun i -> if i > 5 then None else Some (i, i + 1)) 0
+    if not (V.toList a = [0;1;2;3;4;5]) then failwith "not unfold"
+
+
+let tryInit () =
+    let a = V.init 5 id 
+    if not (V.toList a = [0;1;2;3;4]) then failwith "not init"
+
+let tryDestruct () =
+  let all = V.ofList ["a"; "b"; "c"]
+                
+  let ab,c = match V.destruct all with
+             | Some (init, last) -> init, last
+             | None -> failwith "Huh!"
+  if not ((V.ofList ["a"; "b"]) = ab) then failwith "not ab"
+  if not ("c" = c) then failwith "not c"
+
+  let a,b = match V.destruct ab with
+            | Some (init, last) -> init, last
+            | None -> failwith "Huh!"
+  if not ((V.ofList ["a"]) = a) then failwith "not a"
+  if not ("b" = b) then failwith "not a b"       
+
+  let em,a = match V.destruct a with
+             | Some (init, last) -> init, last
+             | None -> failwith "Huh!"
+  if not (V.isEmpty em) then failwith "not empty vector"
+  if not ("a" = a) then failwith "not a \"a\""
+
+  let huh = match V.destruct em with
+             | Some _ -> failwith "Some"
+             | None -> "Nada"
+
+  if not ("Nada" = huh) then failwith "destruct empty not Foo"
+
+  let sab = V.toSub ab
+  let a,b = match SV.destruct sab with
+            | None -> failwith "None"
+            | Some (a,b) -> a,b
+
+  if not ((V.toSub (V.ofList ["b"])) = b) then failwith "not b"
+  if not ("a" = a) then failwith "not a a"
+
+  let b,em = match SV.destruct b with
+             | None -> failwith "None"
+             | Some (em,b) -> em,b
+  if not (SV.isEmpty em) then failwith "not empty"
+  if not ("b" = b) then failwith "not a \"b\""
+
+  let foo = match SV.destruct em with
+               | None -> "Foo"
+               | Some _ -> failwith "Some"
+  if not ("Foo" = foo) then failwith "destruct empty not Foo"
+
+  let a,b = match SV.destructLast sab with
+            | Some (init, last) -> init, last
+            | None -> failwith "Huh!"
+  if not ((V.toSub (V.ofList ["a"])) = a) then failwith "not a"
+  if not ("b" = b) then failwith "not a b"
+
+  let em,a = match SV.destructLast a with
+             | Some (init, last) -> init, last
+             | None -> failwith "Huh!"
+  if not (SV.isEmpty em) then failwith "not empty"
+  if not ("a" = a) then failwith "not a \"a\""
+
+  let huh = match SV.destructLast em with
+             | Some _ -> failwith "Some"
+             | None -> "Nada"
+  if not ("Nada" = huh) then failwith "destructlast empty"
 
 let loo () =
     tryList ()
@@ -476,6 +563,7 @@ let loo () =
     tryget ()
     tryAddAllAndAppend ()
     tryOfList ()
+    tryOfArray ()
     trySet ()
     tryDrop ()
     tryLast ()
@@ -496,8 +584,11 @@ let loo () =
     performance 100000
     performance 500000
     performanceCopyOnWrite 10000
-    tryFoldUntil ()
+    tryFoldTo ()
     tryFoldWhile ()
+    tryUnfold ()
+    tryInit ()
+    tryDestruct ()
     printData ()
     printfn "The skinny goat says all is nice and shiny"
 module Vector = fsgrit.Vector
@@ -508,7 +599,7 @@ type SubVector<'A when 'A : equality> = fsgrit.SubVector<'A>
 let tutorial () =
   let fail x = fun () -> failwith x
   let orFail s t = if t then () else failwith s 
-  let (v:int Vector) = Vector.EMPTY
+  let (v:int Vector) = Vector.Empty
   let v = Vector.empty ()
           |> Vector.add "a"
           |> Vector.add "b"
@@ -542,7 +633,7 @@ let tutorial () =
   let sum = Vector.ofList [1;2;3]
             |> Vector.fold (fun a x -> a + x) 0
 
-  let sum = Vector.foldWhile (fun a x -> (a + x, x < 2)) 0 (Vector.ofList [1;2;3])
+  let sum = Vector.foldUntil (fun a x -> (a + x, x < 2)) 0 (Vector.ofList [1;2;3])
 
   let item = Vector.getOrFail 1 all
   let item = Vector.get 1 all
@@ -583,7 +674,6 @@ let tutorial () =
 
 [<EntryPoint>]
 let main argv = 
-  for i in 0..0 do
-    loo ()
+  loo ()
   tutorial ()
   0
